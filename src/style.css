@@ -3140,9 +3140,8 @@ body {
   pointer-events: none;
 }
 
-.studio .identity .brand,
-.studio .identity a {
-  pointer-events: auto;
+.studio .identity .brand {
+  display: none !important;
 }
 
 .studio .brand {
@@ -3190,7 +3189,7 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-top: 9px;
+  margin-top: 0;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.13em;
@@ -7798,7 +7797,6 @@ body.embed-mode #consent {
 body.embed-minimal .studio .identity .breadcrumb,
 body.embed-minimal .studio .identity .eyebrow,
 body.embed-minimal .studio .identity #resolution-status,
-body.embed-minimal .studio .identity .brand-word,
 body.embed-minimal .studio .sidebar-bottom #coverage,
 body.embed-minimal .studio .caption-stack .drag-hint,
 body.embed-minimal .studio .dock-note {
@@ -7808,11 +7806,13 @@ body.embed-minimal .studio .dock-note {
 body.embed-minimal .studio .identity {
   top: 8px;
   left: 8px;
-  max-width: 40vw;
+  max-width: min(40vw, 280px);
+  gap: 2px;
 }
 
 body.embed-minimal .studio .identity h1 {
   font-size: 1.05rem;
+  margin-top: 0;
 }
 
 body.embed-minimal .studio .tab-bar {

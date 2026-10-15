@@ -277,7 +277,6 @@ document.querySelector("#app").innerHTML = `
   <div id="teaching-view" hidden></div>
 
   <div class="identity">
-    <a class="brand" href="/" aria-label="OMF Atlas home"><span class="brand-mark">${icon("tooth")}</span><span class="brand-word">OMF<span class="brand-light"> Atlas</span></span></a>
     <span class="eyebrow"><span class="live-dot"></span>Oral &amp; maxillofacial anatomy</span>
     <span class="breadcrumb">Anatomy / Head &amp; neck</span>
     <h1 id="stage-title">Head &amp; neck</h1>
