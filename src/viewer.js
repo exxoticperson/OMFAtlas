@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { MASTICATORY, groups, toothNumber } from "./content.js";
-import { createExplosionLayout, tissueSeparation } from "./explosion-layout.js";
+import { createExplosionLayout, explodedOffset, explosionControls, explosionStage, smoothstep } from "./explosion-layout.js";
 import { createSchematicParts, deriveLandmarks } from "./schematic-anatomy.js";
 import {
   buffersForArch,
@@ -35,9 +36,28 @@ export async function createViewer(host, atlas, handlers) {
   } = handlers;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(34, 1, 0.001, 10);
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    powerPreference: "high-performance",
+  });
+  // Sharpness is bought with pixels, so the ratio is capped three ways: by a
+  // ceiling for the device class, by the display's own ratio, and by a pixel
+  // budget so a 4K window does not quadruple the fill cost for a head that is
+  // a few hundred meshes. Phones and short windows get a lower ceiling, as in
+  // the reference.
+  const MAX_PIXELS = 9e6;
+  const pixelRatioFor = (width, height) => {
+    const compact = innerWidth < 768 || innerHeight < 600;
+    const budget = Math.sqrt(MAX_PIXELS / Math.max(1, width * height));
+    return Math.max(1, Math.min(devicePixelRatio || 1, compact ? 1.75 : 2.5, budget));
+  };
+  renderer.setPixelRatio(pixelRatioFor(host.clientWidth, host.clientHeight));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // ACES keeps the pale bone and enamel from clipping under the key light and
+  // rolls the highlights off the way a photograph does.
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
   renderer.localClippingEnabled = true;
   host.append(renderer.domElement);
   renderer.domElement.setAttribute(
@@ -45,18 +65,67 @@ export async function createViewer(host, atlas, handlers) {
     "Interactive 3D anatomy. Drag to rotate, scroll to zoom. Use the structure list and view buttons for keyboard access.",
   );
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = false;
+  // Damped orbit, as in the reference: a drag keeps a little momentum and
+  // settles, which reads as weight. The frame loop below drives the damping.
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.085;
   controls.zoomToCursor = true;
   controls.minDistance = 0.008;
   controls.maxDistance = 1.2;
-  const ambient = new THREE.HemisphereLight(0xffffff, 0x7c8694, 1.8);
+  // Light is a room plus three lamps. The room (an image-based environment)
+  // gives every surface something to reflect, so ridges and foramina read as
+  // form instead of as flat colour; the lamps add a warm key from the upper
+  // left, a cool rim from behind and a soft sky/ground fill. None of it casts
+  // shadows, which would cost frames for little information on a small model.
+  const environment = new THREE.PMREMGenerator(renderer);
+  const room = new RoomEnvironment();
+  const environmentTarget = environment.fromScene(room, 0.04);
+  scene.environment = environmentTarget.texture;
+  room.dispose();
+  environment.dispose();
+  // A three point rig in a camera-relative frame would shift as the reader
+  // orbits; these are fixed in the scene, so the head keeps one consistent
+  // lit side, which is what lets a reader read relief while turning it.
+  const ambient = new THREE.HemisphereLight(0xf4f6ff, 0x6f6a66, 0.55);
   scene.add(ambient);
-  const light = new THREE.DirectionalLight(0xfff7e7, 2.1);
-  light.position.set(-1, 2, 3);
+  const light = new THREE.DirectionalLight(0xfff1e0, 2.6);
+  light.position.set(-1.4, 2.2, 2.6);
   scene.add(light);
-  const fill = new THREE.DirectionalLight(0xc7e4ff, 1.1);
-  fill.position.set(2, 0, -1);
+  const fill = new THREE.DirectionalLight(0xdce8ff, 0.7);
+  fill.position.set(2.2, 0.6, 1.4);
   scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xbcd0ff, 1.9);
+  rim.position.set(0.8, 1.6, -3);
+  scene.add(rim);
+  // What each kind of tissue looks like under the same light. Bone is dry and
+  // diffuse; enamel is hard with a thin glaze; soft tissue is damp, a low
+  // broad clearcoat with a velvet sheen at grazing angles; vessels and nerves
+  // are small, tight and glossy; the eye is a wet lens. Nothing is metallic.
+  const SURFACE_FINISH = {
+    bone: { roughness: 0.62, clearcoat: 0.06, clearcoatRoughness: 0.55, envMapIntensity: 0.8 },
+    enamel: { roughness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.16, envMapIntensity: 1.1 },
+    tissue: {
+      roughness: 0.52,
+      clearcoat: 0.28,
+      clearcoatRoughness: 0.4,
+      sheen: 0.45,
+      sheenRoughness: 0.55,
+      sheenColor: new THREE.Color(0xffd5cc),
+      envMapIntensity: 0.85,
+    },
+    vessel: { roughness: 0.36, clearcoat: 0.55, clearcoatRoughness: 0.22, envMapIntensity: 1 },
+    eye: { roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.2 },
+  };
+  const surfaceKind = (group) =>
+    group === "bones" || group === "neck"
+      ? "bone"
+      : group === "teeth"
+        ? "enamel"
+        : group === "arteries" || group === "veins" || group === "nerves"
+          ? "vessel"
+          : group === "eyes"
+            ? "eye"
+            : "tissue";
   const BASE_BUFFER = "/models/omf.bin";
   async function loadBuffer(url, report) {
     const response = await fetch(url);
@@ -119,15 +188,21 @@ export async function createViewer(host, atlas, handlers) {
   }
   const meshes = [];
   function addMesh(part, geometry) {
-    const material = new THREE.MeshStandardMaterial({
+    const finish = SURFACE_FINISH[surfaceKind(part.group)];
+    const material = new THREE.MeshPhysicalMaterial({
       color: groups[part.group].color,
-      // Schematic structures get a flatter, slightly self-lit surface so they
-      // never read as scanned tissue next to the source meshes.
-      roughness: part.schematic ? 0.9 : 0.64,
-      emissive: part.schematic ? groups[part.group].color : 0x000000,
-      emissiveIntensity: part.schematic ? 0.16 : 0,
       metalness: 0,
       side: THREE.DoubleSide,
+      // Schematic structures get a flatter, slightly self-lit surface so they
+      // never read as scanned tissue next to the source meshes.
+      ...(part.schematic
+        ? {
+            roughness: 0.82,
+            emissive: groups[part.group].color,
+            emissiveIntensity: 0.12,
+            envMapIntensity: 0.45,
+          }
+        : finish),
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.userData.part = part;
@@ -329,14 +404,14 @@ export async function createViewer(host, atlas, handlers) {
   pin.visible = false;
   const beadMesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.0016, 20, 14),
-    new THREE.MeshBasicMaterial({ color: 0x1d6d7b }),
+    new THREE.MeshBasicMaterial({ color: 0x3566d6, toneMapped: false }),
   );
   const haloMesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.0031, 20, 14),
-    new THREE.MeshBasicMaterial({ color: 0x54aab9, transparent: true, opacity: 0.32 }),
+    new THREE.MeshBasicMaterial({ color: 0x5b86ee, transparent: true, opacity: 0.32, toneMapped: false }),
   );
   const pinLabel = new THREE.Sprite(
-    new THREE.SpriteMaterial({ transparent: true, depthTest: false }),
+    new THREE.SpriteMaterial({ transparent: true, depthTest: false, toneMapped: false }),
   );
   pinLabel.position.set(0, 0.0072, 0);
   pin.add(beadMesh, haloMesh, pinLabel);
@@ -472,48 +547,57 @@ export async function createViewer(host, atlas, handlers) {
   let previousDistance = null,
     detailExitDistance = Infinity,
     framing = false;
-  let explosion = 0, appliedExplosion = 0, overviewDistance = 0.55, layoutKey = "", layout;
-  let normalArmed = false, normalStopUntil = 0, applyingZoom = false;
+  // `explosion` is where the slider (or the wheel) says the parts are going;
+  // `shown` is where they are right now. The frame loop eases one toward the
+  // other, so a slider jump or a wheel flick glides rather than teleports, and
+  // the camera follows `shown`, never the target.
+  let explosion = 0, shown = 0, appliedExplosion = 0, overviewDistance = 0.55, layoutKey = "", layout;
+  let settleView = false;
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  // A small dot at the centre of every part once the inventory is nearly laid
+  // out, so a vessel a few pixels wide still has something to point at.
+  const markerPositions = new Float32Array(atlas.parts.length * 3);
+  const markerGeometry = new THREE.BufferGeometry();
+  markerGeometry.setAttribute("position", new THREE.BufferAttribute(markerPositions, 3));
+  markerGeometry.setDrawRange(0, 0);
+  const markerMaterial = new THREE.PointsMaterial({
+    color: 0x3566d6,
+    size: 4,
+    sizeAttenuation: false,
+    transparent: true,
+    opacity: 0.7,
+    depthTest: false,
+    toneMapped: false,
+  });
+  markerMaterial.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <clipping_planes_fragment>",
+      "#include <clipping_planes_fragment>\n if (distance(gl_PointCoord, vec2(0.5)) > 0.5) discard;",
+    );
+  };
+  const markers = new THREE.Points(markerGeometry, markerMaterial);
+  markers.frustumCulled = false;
+  markers.renderOrder = 10;
+  markers.visible = false;
+  scene.add(markers);
+  let applyingZoom = false;
+  // Set when the slider moves the parts, cleared the moment the reader grabs the
+  // camera. While it is set the frame loop keeps the exploded parts framed;
+  // once it is cleared the camera belongs to the reader and nothing refits it.
+  let followExplosion = false;
   const canExplode = () => currentState && !dentalModel && !currentState.isolated && currentState.mode === "3d";
-  function stopAtNormal(gesture, deadline = performance.now() + 300) {
-    view(currentDirection);
-    normalArmed = true;
-    normalStopUntil = gesture ? deadline : 0;
-    host.dataset.normalStop = "true";
-  }
-  function progressZoom(factor, gesture, distance = camera.position.distanceTo(controls.target)) {
-    if (!canExplode()) return false;
-    if (gesture && performance.now() < normalStopUntil) {
-      stopAtNormal(true, normalStopUntil);
-      return true;
-    }
-    if (explosion > 0) {
-      const next = explosion + Math.log(factor) * (factor > 1 ? 45 : 150);
-      setExplosion(next);
-      if (next <= 0) stopAtNormal(gesture);
-      return true;
-    }
-    if (factor > 1 && distance * factor >= overviewDistance - 0.000001) {
-      if (!normalArmed || distance < overviewDistance - 0.000001) stopAtNormal(gesture);
-      else {
-        normalArmed = false;
-        host.dataset.normalStop = "false";
-        setExplosion(Math.log(factor) * 45);
-      }
-      return true;
-    }
-    normalArmed = false;
-    host.dataset.normalStop = "false";
-    return false;
-  }
   function setExplosion(value) {
     onExplode(THREE.MathUtils.clamp(value, 0, 100));
   }
   function applyExplosion() {
+    // Nothing is exploding while a tooth or an isolated part is on show, so
+    // there is nothing to ease; the next time it matters it starts from the
+    // slider's own value.
+    if (!canExplode() || reducedMotion.matches) shown = explosion;
     const visible = meshes.filter((mesh) => mesh.visible);
     const key = visible.map((mesh) => mesh.userData.part.id).join(",") + camera.aspect;
-    const changed = key !== layoutKey || appliedExplosion !== explosion;
-    if (key !== layoutKey) {
+    const changed = key !== layoutKey || appliedExplosion !== shown;
+    if (!layout || key !== layoutKey) {
       layout = createExplosionLayout(visible.map((mesh) => ({
         id: mesh.userData.part.id,
         group: mesh.userData.part.group,
@@ -521,23 +605,75 @@ export async function createViewer(host, atlas, handlers) {
       })), camera.aspect);
       layoutKey = key;
     }
-    const amount = canExplode() ? explosion / 100 : 0;
-    appliedExplosion = explosion;
+    const amount = canExplode() ? shown / 100 : 0;
+    appliedExplosion = shown;
+    const center = new THREE.Vector3();
+    let dots = 0;
     for (const mesh of meshes) {
-      const center = mesh.geometry.boundingBox.getCenter(new THREE.Vector3());
-      const separated = new THREE.Vector3(...tissueSeparation(mesh.userData.part));
-      const cell = layout.cells.get(mesh.userData.part.id);
-      if (amount <= 0.45 || !cell) mesh.position.copy(separated).multiplyScalar(amount / 0.45);
-      else mesh.position.copy(separated).lerp(new THREE.Vector3(cell.x - center.x, cell.y + target.y - center.y, -center.z), (amount - 0.45) / 0.55);
+      mesh.geometry.boundingBox.getCenter(center);
+      const [x, y, z] = explodedOffset({
+        part: mesh.userData.part,
+        center,
+        pivot: target,
+        cell: layout.cells.get(mesh.userData.part.id),
+        amount,
+      });
+      mesh.position.set(x, y, z);
+      if (mesh.visible && amount > 0.75) {
+        markerPositions.set([center.x + x, center.y + y, center.z + z], dots * 3);
+        dots++;
+      }
     }
-    controls.enableRotate = amount < 0.8;
-    controls.mouseButtons.LEFT = amount < 0.8 ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
-    controls.touches.ONE = amount < 0.8 ? THREE.TOUCH.ROTATE : THREE.TOUCH.PAN;
-    controls.zoomToCursor = amount === 0;
+    markerGeometry.setDrawRange(0, dots);
+    markerGeometry.attributes.position.needsUpdate = true;
+    markers.visible = dots > 0;
+    applyControlPolicy(amount * 100);
     host.dataset.explode = String(explosion);
-    host.dataset.zoomStage = amount === 0 ? "assembled" : amount >= 0.95 ? "inventory" : "separating";
-    if (amount > 0 && changed) view(amount > 0.45 ? "anterior" : currentDirection, true);
+    host.dataset.zoomStage = explosionStage(amount * 100);
+    // Reframe only while the parts are travelling on the slider's say-so. A
+    // reader who has taken the camera keeps it, so separation never costs
+    // them their zoom or pan.
+    if (amount > 0 && changed && followExplosion) view(amount > 0.45 ? "anterior" : "keep", true);
     else render();
+    // Once the parts have arrived the follow is over; a later layer toggle or
+    // resize must not pull the camera back to a fit.
+    if (shown === explosion) followExplosion = false;
+  }
+  // The separation slider moves parts; it never moves the controls. Every
+  // gesture stays live at every amount. The only thing that changes in the
+  // flat inventory is which button drags and which pans.
+  function applyControlPolicy(percent) {
+    const policy = explosionControls(percent);
+    controls.enableRotate = policy.enableRotate;
+    controls.enableZoom = policy.enableZoom;
+    controls.enablePan = policy.enablePan;
+    controls.zoomToCursor = policy.zoomToCursor;
+    controls.mouseButtons.LEFT = THREE.MOUSE[policy.left];
+    controls.mouseButtons.RIGHT = THREE.MOUSE[policy.right];
+    controls.touches.ONE = THREE.TOUCH[policy.touch];
+  }
+  applyControlPolicy(0);
+  controls.addEventListener("start", () => {
+    followExplosion = false;
+  });
+  // The frame loop. It eases the explosion toward its target, at the same rate
+  // as the reference (a damped approach, not a fixed-length tween, so a
+  // reversal mid-flight turns round smoothly), and steps the orbit damping.
+  let frame = 0, lastFrame = 0;
+  function tick(now) {
+    frame = requestAnimationFrame(tick);
+    const delta = Math.min((now - lastFrame) / 1000 || 0.016, 0.05);
+    lastFrame = now;
+    if (shown !== explosion) {
+      shown = THREE.MathUtils.damp(shown, explosion, 8, delta);
+      if (Math.abs(shown - explosion) < 0.05) shown = explosion;
+      applyExplosion();
+      if (settleView && shown === 0) {
+        settleView = false;
+        view(currentDirection);
+      }
+    }
+    controls.update();
   }
   const viewAxis = new THREE.Vector3();
   const axisReport = { left: null, superior: null, anterior: null };
@@ -564,10 +700,8 @@ export async function createViewer(host, atlas, handlers) {
       previousDistance !== null && distance < previousDistance - 0.000001;
     const zoomingOut =
       previousDistance !== null && distance > previousDistance + 0.000001;
-    const distanceBefore = previousDistance;
     previousDistance = distance;
-    if (!framing && !applyingZoom && (zoomingIn || zoomingOut) &&
-      progressZoom(distance / distanceBefore, true, distanceBefore)) return;
+    host.dataset.cameraDistance = distance.toFixed(4);
     if (
       !framing &&
       !detailPending &&
@@ -623,14 +757,33 @@ export async function createViewer(host, atlas, handlers) {
     }
   }
   let currentDirection = "oblique";
+  /** The part of the canvas the interface leaves free, in pixels. The values
+   *  are the footprints of the tab bar, the dock and the layers panel. */
+  function freeBand() {
+    const width = host.clientWidth || 1;
+    const height = host.clientHeight || 1;
+    const compact = width < 768;
+    // The notes panel only takes room from the canvas while it is open.
+    const notes = host.ownerDocument.body.classList.contains("details-open");
+    const edge = compact
+      ? { top: 96, bottom: Math.min(340, height * 0.42), left: 12, right: 12 }
+      : { top: 88, bottom: 300, left: width > 860 ? 320 : 16, right: notes && width > 860 ? 400 : 24 };
+    return {
+      ...edge,
+      width: Math.max(160, width - edge.left - edge.right),
+      height: Math.max(120, height - edge.top - edge.bottom),
+    };
+  }
   function view(direction = "oblique", fit = false) {
     framing = true;
-    normalArmed = false;
-    normalStopUntil = 0;
-    host.dataset.normalStop = "false";
-    currentDirection = direction;
+    // "keep" refits the distance and target and leaves the angle the reader
+    // chose where it is.
+    const keepAngle = direction === "keep";
+    if (keepAngle) direction = currentDirection;
+    else currentDirection = direction;
     let center = target.clone(),
-      size = 0.3;
+      size = 0.3,
+      bandShift = null;
     // The tooth model is built with its cervical line at the origin, so
     // framing the periodontium means framing a short band around y = 0.
     if (fit && currentState?.toothDetail && currentState.perioFocus && dentalModel?.visible) {
@@ -679,16 +832,33 @@ export async function createViewer(host, atlas, handlers) {
           : 2.2)) /
         Math.max(0.62, Math.min(camera.aspect, 1)),
     );
-    if (explosion > 0 && canExplode()) {
+    if (shown > 0 && canExplode()) {
       const box = new THREE.Box3();
       meshes.filter((mesh) => mesh.visible).forEach((mesh) => box.expandByObject(mesh));
       if (!box.isEmpty()) {
         center = box.getCenter(new THREE.Vector3());
         const extent = box.getSize(new THREE.Vector3());
-        distance = Math.max(extent.y, extent.x / camera.aspect) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) * 1.25 + extent.z / 2;
+        // Fit the parts into the part of the window the interface leaves
+        // free, not into the whole canvas, then slide the view so they sit in
+        // the middle of that band. Without this the top row of the inventory
+        // is under the tab bar and the bottom row is under the dock.
+        const free = freeBand();
+        const height = host.clientHeight || 1;
+        const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+        distance =
+          (Math.max((extent.y * height) / free.height, (extent.x * height) / free.width) / (2 * tanHalf)) * 1.06 +
+          extent.z / 2;
         distance = Math.max(distance, overviewDistance);
+        // The slide eases in with the separation, so the head does not jump
+        // sideways the instant the slider leaves zero.
+        const ease = smoothstep(shown / 45);
+        bandShift = {
+          x: ((free.left - free.right) / 2) * ease,
+          y: ((free.bottom - free.top) / 2) * ease,
+          perPixel: (2 * distance * tanHalf) / height,
+        };
       }
-      if (explosion > 45) direction = "anterior";
+      if (shown > 45) direction = "anterior";
     } else if (!dentalModel && !currentState?.isolated) overviewDistance = distance;
     controls.maxDistance = Math.max(1.2, distance * 2);
     camera.far = Math.max(dentalModel ? 1 : 10, distance * 4);
@@ -700,15 +870,22 @@ export async function createViewer(host, atlas, handlers) {
       inferior: [0, -1, 0.01],
       oblique: [0.65, 0.12, 1],
     };
+    const offset = keepAngle && shown <= 45 && !camera.position.equals(controls.target)
+      ? camera.position.clone().sub(controls.target)
+      : new THREE.Vector3(...vectors[direction]);
+    if (!keepAngle || shown > 45) camera.up.set(0, 1, 0);
+    offset.normalize();
+    if (bandShift) {
+      // Screen right and up for this viewing direction. Moving the target
+      // against them moves the parts with them on screen.
+      const right = new THREE.Vector3().crossVectors(camera.up, offset).normalize();
+      const up = new THREE.Vector3().crossVectors(offset, right);
+      center
+        .addScaledVector(right, -bandShift.x * bandShift.perPixel)
+        .addScaledVector(up, -bandShift.y * bandShift.perPixel);
+    }
     controls.target.copy(center);
-    camera.up.set(0, 1, 0);
-    camera.position
-      .copy(center)
-      .add(
-        new THREE.Vector3(...vectors[direction])
-          .normalize()
-          .multiplyScalar(distance),
-      );
+    camera.position.copy(center).add(offset.multiplyScalar(distance));
     controls.update();
     render();
     framing = false;
@@ -718,8 +895,9 @@ export async function createViewer(host, atlas, handlers) {
     if (!width || !height) return;
     camera.aspect = width / Math.max(height, 1);
     camera.updateProjectionMatrix();
+    renderer.setPixelRatio(pixelRatioFor(width, height));
     renderer.setSize(width, height);
-    if (explosion > 0) applyExplosion();
+    if (explosion > 0 || shown > 0) applyExplosion();
     else if (dentalModel) view(currentDirection, true);
     else render();
   });
@@ -1076,9 +1254,9 @@ export async function createViewer(host, atlas, handlers) {
               (state.masticatory !== false && MASTICATORY.has(part.id)));
         const selected = part.id === state.selected;
         mesh.material.color.set(
-          selected ? "#54aab9" : groups[part.group].color,
+          selected ? "#5b86ee" : groups[part.group].color,
         );
-        mesh.material.emissive.set(selected ? "#12383e" : "#000000");
+        mesh.material.emissive.set(selected ? "#142349" : part.schematic ? groups[part.group].color : "#000000");
         // Every tissue group carries its own opacity, so bone can be faded
         // to follow a nerve through it. The selected structure stays solid.
         const fade = state.opacity?.get(part.group) ?? 1;
@@ -1086,15 +1264,23 @@ export async function createViewer(host, atlas, handlers) {
         mesh.material.opacity = mesh.material.transparent ? fade : 1;
         mesh.material.depthWrite = !mesh.material.transparent;
       }
+      if (explosion !== previousExplosion) followExplosion = true;
       applyExplosion();
       // The pin marks a point on the assembled mandible. Separating the
       // assembly or opening a tooth model moves that bone out from under it.
       if (pinnedLandmark && (explosion > 0 || dentalModel)) showLandmark(null);
-      if (previousExplosion > 0 && explosion === 0) view(currentDirection);
+      // Going back to assembled re-frames the head, but only once the parts
+      // have actually arrived home; framing early would fit the exploded box.
+      if (previousExplosion > 0 && explosion === 0) {
+        if (shown === 0) view(currentDirection);
+        else settleView = true;
+      }
     },
     view,
-    zoom(factor, gesture = false) {
-      if (progressZoom(factor, gesture)) return;
+    // A zoom is only ever a zoom. It never touches the separation amount, at
+    // any distance, in either direction; that belongs to the slider alone.
+    zoom(factor) {
+      followExplosion = false;
       const selectedTooth =
         !currentState.toothDetail &&
         !dentalModel &&
@@ -1121,8 +1307,12 @@ export async function createViewer(host, atlas, handlers) {
       applyingZoom = false;
     },
     dispose() {
+      cancelAnimationFrame(frame);
       renderer.domElement.removeEventListener("wheel", wheel, true);
       resize.disconnect();
+      environmentTarget.dispose();
+      markerGeometry.dispose();
+      markerMaterial.dispose();
       controls.dispose();
       meshes.forEach((m) => {
         m.geometry.dispose();
@@ -1139,10 +1329,19 @@ export async function createViewer(host, atlas, handlers) {
     api.zoom(Math.exp(THREE.MathUtils.clamp(pixels, -120, 120) * 0.002), true);
   }
   renderer.domElement.addEventListener("wheel", wheel, { capture: true, passive: false });
-  camera.aspect = host.clientWidth / host.clientHeight;
-  camera.updateProjectionMatrix();
+  const bootstrapSize = () => {
+    const { width, height } = host.getBoundingClientRect();
+    const w = width || host.clientWidth || 1;
+    const h = height || host.clientHeight || 1;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setPixelRatio(pixelRatioFor(w, h));
+    renderer.setSize(w, h);
+  };
+  bootstrapSize();
   view();
   onReady();
+  frame = requestAnimationFrame(tick);
 
   // Registered facial and masticatory muscles, fetched after the first frame.
   // A failure here leaves the rest of the atlas usable, so it reports rather

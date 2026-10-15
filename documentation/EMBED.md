@@ -37,6 +37,16 @@ Open:
 - Standalone: http://127.0.0.1:3016/
 - Embed (minimal): http://127.0.0.1:3016/embed.html?ui=minimal&scene=head
 
+### Port 3016 (strict)
+
+Vite is pinned to **3016** with `strictPort: true`. If another process holds the port, `npm run dev` **exits** instead of silently moving to 3017+ (which makes the browser look broken when it still opens 3016).
+
+```powershell
+Get-NetTCPConnection -LocalPort 3016 -ErrorAction SilentlyContinue | Select-Object OwningProcess
+Stop-Process -Id <PID> -Force  # close stale Vite terminals first when possible
+npm run dev
+```
+
 Production build:
 
 ```powershell

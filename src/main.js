@@ -39,7 +39,7 @@ import {
   toothGermDiagram,
 } from "./embryology.js";
 import { getDentitionFDIs } from "./dental-geometry.js";
-import { TISSUE_ORDER, tissueGroup } from "./explosion-layout.js";
+import { INVENTORY_PERCENT, TISSUE_ORDER, explosionStage, tissueGroup } from "./explosion-layout.js";
 import {
   MODEL_GROUPS,
   MODEL_VIEWS,
@@ -277,8 +277,7 @@ document.querySelector("#app").innerHTML = `
   <div id="teaching-view" hidden></div>
 
   <div class="identity">
-    <span class="eyebrow"><span class="live-dot"></span>Oral &amp; maxillofacial anatomy</span>
-    <span class="breadcrumb">Anatomy / Head &amp; neck</span>
+    <span class="breadcrumb">Oral &amp; maxillofacial anatomy</span>
     <h1 id="stage-title">Head &amp; neck</h1>
     <small id="resolution-status" role="status">Preparing surface detail</small>
   </div>
@@ -471,9 +470,14 @@ function updateScene() {
   );
   viewer?.update(state);
   const exploded = state.explode > 0 && !state.arches && !state.toothDetail && state.age === "adult";
-  document.querySelector(".drag-hint").textContent = exploded
-    ? state.explode >= 95 ? "Parts inventory · Drag to pan · Zoom in to reassemble" : "Separating structures · Keep zooming out for inventory"
-    : "Drag to rotate · Scroll to zoom";
+  const stage = exploded ? explosionStage(state.explode) : "assembled";
+  const STAGE_HINTS = {
+    assembled: "Drag to rotate · Scroll to zoom",
+    separating: "Separated · Drag to rotate · Scroll to zoom",
+    inventory: "Inventory · Drag to pan · Scroll to zoom · Right-drag to rotate",
+  };
+  document.querySelector(".drag-hint").textContent = STAGE_HINTS[stage];
+  document.querySelector(".stage-caption").dataset.stage = stage;
   document.querySelector("#viewer").dataset.explode = String(state.explode);
   const part = atlas.parts.find((p) => p.id === state.selected);
   document.querySelector("#selection-name").textContent =
@@ -673,7 +677,7 @@ function renderBrowser() {
     return;
   }
   const query = state.query.toLowerCase().trim();
-  const inventory = state.explode >= 95;
+  const inventory = state.explode >= INVENTORY_PERCENT;
   const matching = atlas.parts.filter((p) =>
     (!inventory || (state.isolated ? p.id === state.selected : state.layers.has(p.group))) && `${displayName(p)} ${p.id} ${p.conceptId} ${toothNumber(p.name) || ""}`
       .toLowerCase()
@@ -705,7 +709,7 @@ function renderBrowser() {
     }
     ${!query && state.hidden.size ? `<div class="hidden-row"><span>${state.hidden.size} structure${state.hidden.size === 1 ? "" : "s"} hidden</span><button id="show-hidden">Show again</button></div>` : ""}
     ${!query ? `<p class="fine-print fade-note">Each slider fades that layer. Fading bone is how a nerve or vessel inside it becomes visible; a selected structure always stays solid.</p><div class="section-label"><h3>Structure library</h3><span>${atlas.parts.length}</span></div>` : ""}
-    ${inventory ? `<div class="inventory-heading"><strong>Parts inventory · ${matching.length}</strong><p>Every visible structure is separated in the 3D view. Select a name below; zoom in to reassemble. Use All to include hidden systems.</p><button id="reassemble">Reassemble head & neck</button></div>` : ""}
+    ${inventory ? `<div class="inventory-heading"><strong>Parts inventory · ${matching.length}</strong><p>Every visible structure is separated in the 3D view. Select a name below, or reassemble. Zoom and pan stay free. Use All to include hidden systems.</p><button id="reassemble">Reassemble head & neck</button></div>` : ""}
     <details id="structure-library" ${query || inventory ? "open" : ""}><summary>${inventory ? "Names of displayed parts" : "Browse named structures"}</summary><div class="structure-list">${matching.length ? structureRows : '<p class="empty">No matching structure. Try “mandible”, “tongue”, or “36”.</p>'}</div></details>`;
   browser.querySelector("#reassemble")?.addEventListener("click", () => setExplosion(0));
   if (inventory) {
@@ -791,7 +795,7 @@ function renderBrowser() {
 }
 
 function setExplosion(progress) {
-  const wasInventory = state.explode >= 95;
+  const wasInventory = state.explode >= INVENTORY_PERCENT;
   state.explode = Math.round(Math.max(0, Math.min(100, progress)));
   const input = document.querySelector("#explode");
   if (input) input.value = String(state.explode);
@@ -799,13 +803,13 @@ function setExplosion(progress) {
   if (output) output.value = `${state.explode}%`;
   if (state.explode > 0 && touchLayout()) showSeparation(true);
   updateScene();
-  if (wasInventory !== (state.explode >= 95)) {
+  if (wasInventory !== (state.explode >= INVENTORY_PERCENT)) {
     renderBrowser();
     document.querySelector("#browser").scrollTop = 0;
-    document.querySelector("#mobile-library span").textContent = state.explode >= 95 ? "Parts inventory" : "Layers";
+    document.querySelector("#mobile-library span").textContent = state.explode >= INVENTORY_PERCENT ? "Parts inventory" : "Layers";
     if (touchLayout()) {
-      document.querySelector(".sidebar").classList.toggle("expanded", state.explode >= 95);
-      document.querySelector("#mobile-library").setAttribute("aria-expanded", String(state.explode >= 95));
+      document.querySelector(".sidebar").classList.toggle("expanded", state.explode >= INVENTORY_PERCENT);
+      document.querySelector("#mobile-library").setAttribute("aria-expanded", String(state.explode >= INVENTORY_PERCENT));
     }
   }
 }

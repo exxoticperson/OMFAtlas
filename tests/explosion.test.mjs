@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createExplosionLayout, tissueGroup, tissueSeparation, TISSUE_ORDER } from "../src/explosion-layout.js";
+import { createExplosionLayout, explosionControls, tissueGroup, tissueSeparation, TISSUE_ORDER } from "../src/explosion-layout.js";
 
 test("inventory packs all visible meshes without overlap on narrow and wide screens", () => {
   const { parts } = JSON.parse(readFileSync(new URL("../public/models/atlas.json", import.meta.url)));
@@ -46,4 +46,29 @@ test("tissue separation is rigid and inventory keeps ordered tissue blocks", () 
       precedingBottom = Math.min(...block.map((cell) => cell.y - cell.height / 2));
     }
   }
+});
+
+test("separation never disables a camera gesture", () => {
+  for (let percent = 0; percent <= 100; percent += 5) {
+    const controls = explosionControls(percent);
+    assert.equal(controls.enableRotate, true, `rotate at ${percent}%`);
+    assert.equal(controls.enableZoom, true, `zoom at ${percent}%`);
+    assert.equal(controls.enablePan, true, `pan at ${percent}%`);
+    assert.equal(controls.zoomToCursor, true, `zoom to cursor at ${percent}%`);
+    assert.notEqual(controls.left, controls.right, `one gesture each way at ${percent}%`);
+  }
+  assert.equal(explosionControls(0).left, "ROTATE");
+  assert.equal(explosionControls(100).left, "PAN");
+  assert.equal(explosionControls(100).right, "ROTATE");
+});
+
+test("the viewer's zoom never writes the separation amount", () => {
+  const source = readFileSync(new URL("../src/viewer.js", import.meta.url), "utf8");
+  const zoom = source.slice(source.indexOf("    zoom(factor"), source.indexOf("    dispose()"));
+  assert.ok(zoom.length > 100, "found the zoom method");
+  assert.doesNotMatch(zoom, /setExplosion|onExplode|explosion\s*=/);
+  assert.doesNotMatch(source, /progressZoom|stopAtNormal|normalStop/);
+  const render = source.slice(source.indexOf("  function render()"), source.indexOf("  let currentDirection"));
+  assert.ok(render.length > 100, "found render");
+  assert.doesNotMatch(render, /setExplosion|onExplode/);
 });

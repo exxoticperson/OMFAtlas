@@ -4,8 +4,8 @@
   color: #20242b;
   background: #f3f4f4;
   font-synthesis: none;
-  --navy: #263b48;
-  --teal: #426570;
+  --navy: #1b2333;
+  --teal: #3566d6;
   --line: #18253618;
   --muted: #68727d;
   --stage: #f3f4f4;
@@ -1731,7 +1731,7 @@ header {
   height: 39px;
   background: none;
   color: var(--navy);
-  border: 1px solid #263b4825;
+  border: 1px solid #1b233325;
   border-radius: 10px;
 }
 .brand-mark svg {
@@ -3047,9 +3047,9 @@ dialog {
   --ink-soft: #3c4854;
   --muted: #69747d;
   --faint: #8a949d;
-  --navy: #1f3b45;
-  --teal: #2f7f8c;
-  --accent: #54aab9;
+  --navy: #1b2333;
+  --teal: #3566d6;
+  --accent: #5b86ee;
   --line: #17242f1a;
   --line-soft: #17242f12;
   --stage: #f1f2f2;
@@ -3592,7 +3592,7 @@ body {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--teal);
-  background: #2f7f8c1a;
+  background: #3566d61a;
   border-radius: 5px;
   padding: 2px 5px;
   white-space: nowrap;
@@ -4125,7 +4125,7 @@ body.details-open .studio .inspector {
   border: 0;
   border-left: 3px solid var(--accent);
   border-radius: 0 10px 10px 0;
-  background: #54aab914;
+  background: #5b86ee14;
 }
 
 .studio .learning-note > span {
@@ -4145,7 +4145,7 @@ body.details-open .studio .inspector {
 
 .studio .schematic-callout {
   border-left-color: var(--teal);
-  background: #2f7f8c12;
+  background: #3566d612;
 }
 
 .studio .fine-print {
@@ -5264,7 +5264,7 @@ body.tooth-inspection .studio .sidebar {
   padding: 14px 16px;
   border-left: 3px solid var(--accent);
   border-radius: 0 11px 11px 0;
-  background: #54aab914;
+  background: #5b86ee14;
 }
 
 .studio .stage-explanation strong {
@@ -5745,10 +5745,10 @@ body:not(.details-open) .studio .caption-stack {
   --ink-soft: #3c4854;
   --muted: #69747d;
   --faint: #8a949d;
-  --navy: #1f3b45;
+  --navy: #1b2333;
   --on-navy: #ffffff;
-  --teal: #2f7f8c;
-  --accent: #54aab9;
+  --teal: #3566d6;
+  --accent: #5b86ee;
   --line: #17242f1a;
   --line-soft: #17242f12;
   --stage: #f1f2f2;
@@ -5768,10 +5768,10 @@ body:not(.details-open) .studio .caption-stack {
   --ink-soft: #bcc8d2;
   --muted: #8f9ba6;
   --faint: #717e89;
-  --navy: #2c7c8b;
+  --navy: #3d5fc4;
   --on-navy: #f4fbfc;
-  --teal: #6fc3d0;
-  --accent: #54aab9;
+  --teal: #8eaaf5;
+  --accent: #5b86ee;
   --line: #ffffff24;
   --line-soft: #ffffff14;
   --stage: #0f1519;
@@ -5855,15 +5855,15 @@ body:not(.details-open) .studio .caption-stack {
 
 :root[data-theme="dark"] .studio .learning-note,
 :root[data-theme="dark"] .studio .stage-explanation {
-  background: #54aab91f;
+  background: #5b86ee1f;
 }
 
 :root[data-theme="dark"] .studio .schematic-callout {
-  background: #6fc3d01c;
+  background: #8eaaf51c;
 }
 
 :root[data-theme="dark"] .studio .schematic-badge {
-  background: #6fc3d024;
+  background: #8eaaf524;
   color: var(--teal);
 }
 
@@ -6076,8 +6076,8 @@ body:not(.details-open) .studio .caption-stack {
 }
 
 :root[data-theme="dark"] .studio .dentition-switch .active {
-  background: #2c7c8b2e;
-  border-color: #2c7c8b6b;
+  background: #3d5fc42e;
+  border-color: #3d5fc46b;
   color: var(--teal);
 }
 
@@ -7830,4 +7830,316 @@ body.embed-minimal .studio .inspector {
 
 body.embed-minimal.embed-mode .studio .stage-bottom {
   padding-bottom: 22px;
+}
+
+/* ---- Refinement layer ---------------------------------------------------
+
+   Reference: the Human Atlas studio (atlas.taim.best), read for what its
+   chrome does and what it does not do. The scene is the subject, so the
+   interface steps back: flat opaque surfaces separated from the stage by a
+   step in tone rather than blur, hairlines or glow; one accent used for the
+   active state; sentence-case labels at a readable size instead of tiny
+   tracked capitals; no eyebrow badges, pills or status dots. This layer sits
+   last so it wins over the older rules above it without rewriting them. */
+
+:root,
+:root[data-theme="light"] {
+  --stage: #f2f3f3;
+  --glass: #ffffff;
+  --surface-veil: #ffffffee;
+  --line: #17242f14;
+  --line-soft: #17242f0d;
+  --ink: #15191e;
+  --ink-soft: #364049;
+  --muted: #5b6670;
+  --faint: #6f7a84;
+  --panel-radius: 12px;
+  --control-radius: 8px;
+  --shadow: 0 1px 2px #1a2a3a0f, 0 8px 28px #1a2a3a0f;
+}
+
+:root[data-theme="dark"] {
+  --stage: #0e1317;
+  --glass: #172027;
+  --surface: #1d2830;
+  --surface-veil: #172027ee;
+  --line: #ffffff17;
+  --line-soft: #ffffff0f;
+  --muted: #9aa6b0;
+  --faint: #8794a0;
+  --shadow: 0 1px 2px #00000052, 0 10px 32px #0000004d;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #5b86ee4d;
+}
+
+/* The stage is one flat field. The old vignette darkened the corners, which
+   is a gradient doing the job of the tone step above. */
+.vignette,
+:root[data-theme="dark"] .vignette {
+  display: none;
+}
+
+/* Floating surfaces: opaque, no blur. Blur was costing a compositing layer per
+   panel over a WebGL canvas and made text edges swim when the model moved. */
+.panel,
+.studio .tab-bar,
+.studio .top-actions > button,
+.studio .view-controls,
+.studio .stage-bottom,
+.studio .inspector {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.panel,
+.studio .tab-bar,
+.studio .stage-bottom,
+.studio .view-controls {
+  border-color: var(--line-soft);
+}
+
+/* Type. Large title, small supporting text, and the middle sizes dropped. */
+.studio .identity .breadcrumb {
+  margin-top: 0;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.studio h1#stage-title {
+  margin: 2px 0 4px;
+  font-size: clamp(28px, 2.4vw, 36px);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.04;
+}
+
+.studio #resolution-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.studio .inspector .detail-heading h2 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.studio .inspector .detail-heading p,
+.studio .inspector p {
+  line-height: 1.55;
+}
+
+.studio .inspector .detail-heading p {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Labels that used to be 9 to 11px tracked capitals. Sentence case, 12px,
+   the muted ink, so they read as words rather than as a texture. */
+.studio .top-actions label,
+.studio .choices label,
+.studio .stage-caption,
+.studio .learning-note > span,
+.studio .landmark-pick > span,
+.studio .landmark-method span,
+.studio .tooth-source > span:first-child,
+.studio .chronology-head {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.studio .top-actions label,
+.studio .choices label {
+  gap: 4px;
+  color: var(--muted);
+}
+
+/* No pill above the heading: the heading says what the panel is. */
+.studio .detail-tag {
+  display: block;
+  margin-bottom: 6px;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .studio .detail-tag {
+  background: none;
+  color: var(--muted);
+}
+
+/* A schematic marker is information, so it stays, but as text and not a chip. */
+.schematic-badge {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--teal);
+}
+
+.part-hover .schematic-badge {
+  background: none;
+  color: #bfe3ea;
+}
+
+.studio .section-label h3 {
+  letter-spacing: -0.01em;
+}
+
+.studio .section-label > span,
+:root[data-theme="dark"] .studio .section-label > span {
+  background: none;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* The caption under the model names the stage the explosion is in. */
+.studio .stage-caption {
+  gap: 10px;
+  color: var(--muted);
+}
+
+.studio .caption-line {
+  display: none;
+}
+
+.studio .stage-caption .drag-hint {
+  transition: color 160ms ease;
+}
+
+.studio .stage-caption[data-stage="separating"] .drag-hint,
+.studio .stage-caption[data-stage="inventory"] .drag-hint {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Separation control: the output is a number, not a badge. */
+.studio .explode-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.studio .explode-label output,
+:root[data-theme="dark"] .studio .explode-label output {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.studio .slider-endpoints {
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.studio .explode-control input[type="range"],
+.studio .sliders input[type="range"] {
+  accent-color: var(--teal);
+}
+
+/* The hover name is a tooltip over a drawing: ink on a solid field, tight. */
+.part-hover {
+  padding: 6px 10px;
+  border-radius: 7px;
+  background: #151b21;
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: 0 4px 14px #0f161c33;
+}
+
+:root[data-theme="dark"] .part-hover {
+  background: #05080b;
+  border: 1px solid var(--line);
+}
+
+/* Keyboard focus is visible on everything that takes it, and it is the same
+   ring everywhere. */
+.studio button:focus-visible,
+.studio select:focus-visible,
+.studio input:focus-visible,
+.studio summary:focus-visible,
+.studio a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.studio button,
+.studio .nav-button {
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.studio button:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+.studio .stage-caption,
+.studio .layer-count,
+.studio #visible-count,
+.studio output {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio *,
+  .studio *::before,
+  .studio *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+/* ---- Palette ------------------------------------------------------------
+   The earlier teal-on-grey scheme is replaced by graphite neutrals with one
+   cobalt accent. The stage is a warm paper white by day and a neutral
+   graphite by night, so the warm tissue colours of the model are the only
+   saturated thing on screen apart from the single accent. */
+:root,
+:root[data-theme="light"] {
+  --stage: #f4f3f0;
+  --navy: #1b2333;
+  --on-navy: #ffffff;
+  --teal: #3566d6;
+  --accent: #5b86ee;
+}
+:root[data-theme="dark"] {
+  --stage: #0d0f14;
+  --glass: #161a22;
+  --surface: #1d222c;
+  --surface-veil: #161a22ee;
+  --navy: #3d5fc4;
+  --on-navy: #f5f8ff;
+  --teal: #8eaaf5;
+  --accent: #6f93f2;
 }
