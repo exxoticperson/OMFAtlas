@@ -2,6 +2,13 @@ import "./style.css";
 import "./design-v2.css";
 import { initShellNav } from "./shell-nav.js";
 import { PRESENTATIONS } from "./realism-v2.js";
+import { readQualityMode, QUALITY_KEY } from "./perf.js";
+import { buildLayerChipsHtml, bindLayerChips } from "./layer-chips.js";
+import {
+  INTRAORAL_LAYERS,
+  INTRAORAL_LITERATURE,
+  INTRAORAL_PRESETS,
+} from "./intraoral.js";
 import { createViewer } from "./viewer.js";
 import {
   MASTICATORY,
@@ -72,6 +79,8 @@ const icon = (name) => {
     sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.5 1.5m11.2 11.2 1.5 1.5M19.1 4.9l-1.5 1.5M6.4 17.6l-1.5 1.5"/>',
     moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>',
     separate: '<path d="M12 4v16"/><path d="m7 9-4 3 4 3"/><path d="m17 9 4 3-4 3"/>',
+    mouth:
+      '<path d="M5 10c0-4 3.5-7 7-7s7 3 7 7c0 2.5-1.5 4.5-3.5 5.5 2 1 3.5 3 3.5 5.5H5c0-2.5 1.5-4.5 3.5-5.5C6.5 14.5 5 12.5 5 10Z"/><path d="M9 13h6"/>',
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.tooth}</svg>`;
 };
@@ -106,9 +115,16 @@ const readPresentation = () => {
   } catch {}
   return "clinical";
 };
+const embedBootstrap = globalThis.__OMF_EMBED__ ?? null;
 const state = {
   selected: "FJ3289",
   presentation: readPresentation(),
+  qualityMode:
+    embedBootstrap?.quality === "smooth" ||
+    embedBootstrap?.quality === "balanced" ||
+    embedBootstrap?.quality === "quality"
+      ? embedBootstrap.quality
+      : readQualityMode(),
   layers: new Set(
     PRESENTATIONS[readPresentation()]?.layers ?? DEFAULT_LAYERS,
   ),
@@ -151,19 +167,26 @@ const state = {
   pattern: 0,
   stage: "cap",
   schematic: true,
+  structuresVisibleOnly: false,
+  intraoralPreset: "occlusal",
+  intraoralShowBone: true,
+  intraoralFocus: true,
+  /** atlas | openfulljaw | toothfairy */
+  intraoralModel: "openfulljaw",
 };
 try {
   state.saved = new Set(JSON.parse(localStorage.getItem("omf-saved") || "[]"));
 } catch {}
 let atlas, viewer;
 
-const embedConfig = globalThis.__OMF_EMBED__ ?? null;
+const embedConfig = embedBootstrap;
 const isEmbed = Boolean(embedConfig?.embed);
 /** @type {ReturnType<import("./embed-bridge.js").initEmbedBridge> | null} */
 let embedBridge = null;
 
 function embedSceneFromTab(tab) {
   if (tab === "dental") return "dental";
+  if (tab === "intraoral") return "intraoral";
   if (tab === "study" || tab === "quiz") return tab;
   return "head";
 }
@@ -203,6 +226,9 @@ function applyEmbedScene(scene) {
       break;
     case "quiz":
       setTab("quiz");
+      break;
+    case "intraoral":
+      setTab("intraoral");
       break;
     default:
       break;
@@ -254,6 +280,8 @@ async function initEmbedIntegration() {
       explode: state.explode,
       tab: state.tab,
       mode: state.mode,
+      presentation: state.presentation,
+      qualityMode: state.qualityMode,
     }),
     onNavigate: (payload) => {
       if (payload?.scene) applyEmbedScene(payload.scene);
@@ -301,6 +329,7 @@ document.querySelector("#app").innerHTML = `
 
   <nav class="tab-bar" aria-label="Main navigation">${[
     ["anatomy", "layers", "Explore", "Explore anatomy"],
+    ["intraoral", "mouth", "Intra-oral", "Intra-oral view"],
     ["dental", "tooth", "Dental", "Dental atlas"],
     ["study", "book", "Study", "Study guide"],
     ["quiz", "quiz", "Test", "Self-test"],
@@ -314,6 +343,8 @@ document.querySelector("#app").innerHTML = `
   <div class="top-actions">
     <button class="icon-button" id="theme" title="Switch between light and dark" aria-label="Switch between light and dark"></button>
     <button class="icon-button" id="reset" title="Reset view and layers" aria-label="Reset view and layers">${icon("reset")}</button>
+    <button class="icon-button" id="quality-mode" title="Graphics quality (smooth / balanced / quality)" aria-label="Graphics quality">◐</button>
+    <button class="icon-button" id="shortcuts-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">${icon("info")}</button>
     <button id="toggle-details" aria-expanded="false">Structure</button>
   </div>
 
@@ -327,10 +358,20 @@ document.querySelector("#app").innerHTML = `
   </aside>
   <button id="mobile-library" aria-expanded="false" aria-label="Layers and structure library" title="Layers and structure library">${icon("layers")}<span>Layers</span></button>
 
-  <div class="view-controls panel" aria-label="Camera views">
+  <div class="view-controls panel" id="head-view-controls" aria-label="Camera views">
     <div class="view-pills">${["oblique", "anterior", "lateral", "inferior"].map((v, i) => `<button data-view="${v}" class="${i === 0 ? "active" : ""}" title="${v[0].toUpperCase() + v.slice(1)} view"><span>${v[0].toUpperCase() + v.slice(1)}</span></button>`).join("")}</div>
     <i role="presentation"></i>
     <div class="zoom-controls"><button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="fit" aria-label="Fit visible anatomy" title="Fit visible anatomy">${icon("expand")}</button></div>
+  </div>
+  <div class="view-controls panel" id="intraoral-view-controls" hidden aria-label="Intra-oral camera">
+    <div class="view-pills">${Object.entries(INTRAORAL_PRESETS)
+      .map(
+        ([id, cfg]) =>
+          `<button type="button" data-intraoral-view="${id}" class="${id === "occlusal" ? "active" : ""}" title="${cfg.hint}"><span>${cfg.label}</span></button>`,
+      )
+      .join("")}</div>
+    <i role="presentation"></i>
+    <div class="zoom-controls"><button id="intraoral-zoom-in" aria-label="Zoom in">+</button><button id="intraoral-zoom-out" aria-label="Zoom out">−</button><button id="intraoral-fit" aria-label="Fit oral cavity">${icon("expand")}</button></div>
   </div>
 
   <div id="mode-bar" class="panel" hidden><button data-mode="3d" class="active"><span>3D anatomy</span></button><button data-mode="section"><span>Tooth &amp; periodontium</span></button><button data-mode="canals"><span>Root canal explorer</span></button><button data-mode="development"><span>Tooth development</span></button><button data-mode="models"><span>Source models</span></button></div>
@@ -384,10 +425,22 @@ document.querySelector("#app").innerHTML = `
 
 if (isEmbed) applyEmbedShell();
 shellNav = initShellNav({ compact: true });
+if (
+  embedBootstrap?.presentation === "teaching" ||
+  embedBootstrap?.presentation === "clinical"
+) {
+  state.presentation = embedBootstrap.presentation;
+  state.layers = new Set(PRESENTATIONS[state.presentation].layers);
+  if (state.presentation === "clinical") state.schematic = true;
+}
 document.body.classList.toggle(
   "presentation-clinical",
   state.presentation === "clinical",
 );
+document.body.dataset.qualityMode = state.qualityMode;
+document.querySelector("#quality-mode").title = `Quality: ${state.qualityMode} (click to change)`;
+syncViewChrome();
+document.body.dataset.qualityMode = state.qualityMode;
 
 // ---- Analytics consent ---------------------------------------------------
 //
@@ -663,6 +716,18 @@ function selectPart(id, options = {}) {
   if (!options.fromEmbed) emitSelectStructure();
 }
 
+const QUALITY_CYCLE = ["smooth", "balanced", "quality"];
+function setQualityMode(mode) {
+  if (!QUALITY_CYCLE.includes(mode)) return;
+  state.qualityMode = mode;
+  document.body.dataset.qualityMode = mode;
+  try {
+    localStorage.setItem(QUALITY_KEY, mode);
+  } catch {}
+  document.querySelector("#quality-mode").title = `Quality: ${mode} (click to change)`;
+  updateScene();
+}
+
 function setPresentation(mode) {
   if (!PRESENTATIONS[mode]) return;
   state.presentation = mode;
@@ -678,7 +743,25 @@ function setPresentation(mode) {
   }
 }
 
+function togglePresentation() {
+  setPresentation(state.presentation === "clinical" ? "teaching" : "clinical");
+}
+
+function showShortcuts() {
+  const modal = document.querySelector("#modal");
+  document.querySelector("#modal-content").innerHTML = `<h2>Keyboard shortcuts</h2><ul class="shortcut-list"><li><kbd>/</kbd> Focus search and open layers</li><li><kbd>L</kbd> Toggle layers panel</li><li><kbd>I</kbd> Toggle structure details</li><li><kbd>P</kbd> Teaching ↔ Clinical surface</li><li><kbd>Esc</kbd> Clear selection</li><li><kbd>Shift</kbd>+click layer chip · solo that layer</li><li><kbd>Alt</kbd>+click structure · solo its layer</li></ul><p class="fine-print">Quality ◐ cycles smooth → balanced → quality for slower GPUs.</p>`;
+  modal.showModal();
+}
+
 function renderBrowser() {
+  if (state.tab === "intraoral") {
+    document.querySelector("#browser").innerHTML =
+      `<div class="section-label"><h3>Intra-oral</h3></div><p class="fine-print">Pick a surface and FDI in <strong>Structure</strong>. Occlusal / Lingual / Buccal presets are above the viewer.</p><button type="button" class="full-width" id="open-intraoral-structure">Open structure panel</button>`;
+    document.querySelector("#open-intraoral-structure")?.addEventListener("click", () =>
+      showDetails(true),
+    );
+    return;
+  }
   if (state.arches || state.age !== "adult") {
     const primary = state.age === "child";
     document.querySelector("#browser").innerHTML =
@@ -711,11 +794,20 @@ function renderBrowser() {
   }
   const query = state.query.toLowerCase().trim();
   const inventory = state.explode >= INVENTORY_PERCENT;
-  const matching = atlas.parts.filter((p) =>
-    (!inventory || (state.isolated ? p.id === state.selected : state.layers.has(p.group))) && `${displayName(p)} ${p.id} ${p.conceptId} ${toothNumber(p.name) || ""}`
-      .toLowerCase()
-      .includes(query),
-  );
+  const matching = atlas.parts.filter((p) => {
+    const inLayers =
+      !inventory ||
+      (state.isolated
+        ? p.id === state.selected
+        : state.layers.has(p.group) ||
+          (state.masticatory !== false && MASTICATORY.has(p.id)));
+    const visibleOnly =
+      !state.structuresVisibleOnly ||
+      state.layers.has(p.group) ||
+      (state.masticatory !== false && MASTICATORY.has(p.id));
+    const text = `${displayName(p)} ${p.id} ${p.conceptId} ${toothNumber(p.name) || ""}`.toLowerCase();
+    return inLayers && visibleOnly && text.includes(query);
+  });
   if (inventory) matching.sort((a,b) => TISSUE_ORDER.indexOf(tissueGroup(a)) - TISSUE_ORDER.indexOf(tissueGroup(b)) || displayName(a).localeCompare(displayName(b)));
   const structureRows = matching.map((p,index) => {
     const type = tissueGroup(p);
@@ -724,24 +816,19 @@ function renderBrowser() {
     return `${heading}<button data-part="${p.id}" class="structure ${p.id === state.selected ? "selected" : ""} ${isSchematic(p) ? "is-schematic" : ""}"><span class="tiny-dot" style="background:${groups[p.group].color}"></span><span>${escape(displayName(p))}</span>${isSchematic(p) ? SCHEMATIC_BADGE : ""}${toothNumber(p.name) ? `<small>${toothNumber(p.name)}</small>` : ""}${icon("arrow")}</button>`;
   }).join("");
   const browser = document.querySelector("#browser");
-  browser.innerHTML = `<div class="section-label"><h3>${query ? "Search results" : "Systems"}</h3><span>${matching.length}</span></div>${!query ? `<div class="presentation-switch" role="group" aria-label="Surface presentation"><button type="button" data-presentation="teaching" aria-pressed="${state.presentation === "teaching"}">${PRESENTATIONS.teaching.label}</button><button type="button" data-presentation="clinical" aria-pressed="${state.presentation === "clinical"}">${PRESENTATIONS.clinical.label}</button></div><div class="layer-presets"><button data-preset="realism">Full head</button><button data-preset="all">All</button><button data-preset="skeleton">Skeleton</button><button data-preset="vascular">Vessels</button><button data-preset="neuro">Nerves</button><button data-preset="none">Hide all</button></div><label class="layer schematic-switch"><span class="layer-dot schematic-dot"></span><span>Schematic structures</span><span class="layer-count">${atlas.parts.filter(isSchematic).length}</span><input type="checkbox" data-schematic ${state.schematic ? "checked" : ""} aria-label="Show schematic structures"></label><p class="fine-print schematic-note">Nerves, vessels, glands, the sinus and the joint disc that the source scan omits, drawn onto this skull.</p><label class="layer schematic-switch"><span class="layer-dot" style="background:${groups.muscles.color}"></span><span>Muscles of mastication</span><span class="layer-count">${atlas.parts.filter((p) => MASTICATORY.has(p.id)).length}</span><input type="checkbox" data-masticatory ${state.masticatory ? "checked" : ""} aria-label="Show the muscles of mastication"></label><p class="fine-print schematic-note">Masseter, temporalis, the pterygoids and buccinator stay on with the muscle layer off, because they are what this atlas is about.</p>` : ""}
-    ${
-      query
-        ? ""
-        : Object.entries(groups)
-            .filter(([key]) => atlas.parts.some((p) => p.group === key))
-            .map(
-              ([key, g]) =>
-                (() => {
-                  const inGroup = atlas.parts.filter((p) => p.group === key);
-                  const drawn = inGroup.filter(isSchematic).length;
-                  return `<div class="layer"><button class="layer-name" data-solo="${key}" title="Show only ${g.name.toLowerCase()}"><span class="layer-dot" style="background:${g.color}"></span><span>${g.name}</span><span class="layer-count">${inGroup.length - drawn}${drawn ? `<i title="${drawn} schematic structures">+${drawn}</i>` : ""}</span></button><input type="checkbox" data-layer="${key}" ${state.layers.has(key) ? "checked" : ""} aria-label="Show ${g.name}"><input class="layer-fade" type="range" min="15" max="100" value="${Math.round(groupOpacity(key) * 100)}" data-opacity="${key}" aria-label="${g.name} opacity" title="Fade ${g.name.toLowerCase()} to see through them"></div>`;
-                })(),
-            )
-            .join("")
-    }
-    ${!query && state.hidden.size ? `<div class="hidden-row"><span>${state.hidden.size} structure${state.hidden.size === 1 ? "" : "s"} hidden</span><button id="show-hidden">Show again</button></div>` : ""}
-    ${!query ? `<p class="fine-print fade-note">Each slider fades that layer. Fading bone is how a nerve or vessel inside it becomes visible; a selected structure always stays solid.</p><div class="section-label"><h3>Structure library</h3><span>${atlas.parts.length}</span></div>` : ""}
+  const layerChips = !query
+    ? buildLayerChipsHtml({
+        groups,
+        state,
+        atlas,
+        groupOpacity,
+        isSchematic,
+        MASTICATORY,
+      })
+    : "";
+  browser.innerHTML = `<div class="section-label"><h3>${query ? "Search results" : "Layers"}</h3><span>${matching.length}</span></div>${!query ? `<div class="presentation-switch" role="group" aria-label="Surface presentation"><button type="button" data-presentation="teaching" aria-pressed="${state.presentation === "teaching"}">${PRESENTATIONS.teaching.label}</button><button type="button" data-presentation="clinical" aria-pressed="${state.presentation === "clinical"}">${PRESENTATIONS.clinical.label}</button></div><div class="layer-presets layer-presets-scroll"><button data-preset="realism">Full head</button><button data-preset="omf">OMF</button><button data-preset="skeleton">Bone</button><button data-preset="vascular">Vessels</button><button data-preset="neuro">Nerves</button><button data-preset="all">All</button><button data-preset="none">Clear</button></div>${layerChips}` : ""}
+    ${!query && state.hidden.size ? `<div class="hidden-row"><span>${state.hidden.size} hidden</span><button id="show-hidden">Restore</button></div>` : ""}
+    ${!query ? `<div class="section-label section-label-spaced structures-head"><h3>Structures</h3><span>${matching.length}</span><button type="button" class="text-button structures-filter" id="structures-visible-only" aria-pressed="${state.structuresVisibleOnly}">${state.structuresVisibleOnly ? "All names" : "On-screen only"}</button></div>` : ""}
     ${inventory ? `<div class="inventory-heading"><strong>Parts inventory · ${matching.length}</strong><p>Every visible structure is separated in the 3D view. Select a name below, or reassemble. Zoom and pan stay free. Use All to include hidden systems.</p><button id="reassemble">Reassemble head & neck</button></div>` : ""}
     <details id="structure-library" ${query || inventory ? "open" : ""}><summary>${inventory ? "Names of displayed parts" : "Browse named structures"}</summary><div class="structure-list">${matching.length ? structureRows : '<p class="empty">No matching structure. Try “mandible”, “tongue”, or “36”.</p>'}</div></details>`;
   browser.querySelector("#reassemble")?.addEventListener("click", () => setExplosion(0));
@@ -749,6 +836,7 @@ function renderBrowser() {
     browser.prepend(browser.querySelector("#structure-library"));
     browser.prepend(browser.querySelector(".inventory-heading"));
   }
+  bindLayerChips(browser, { state, updateScene, renderBrowser });
   browser.querySelectorAll("[data-presentation]").forEach(
     (b) =>
       (b.onclick = () => setPresentation(b.dataset.presentation)),
@@ -758,6 +846,23 @@ function renderBrowser() {
       (b.onclick = () => {
         if (b.dataset.preset === "realism") {
           setPresentation("clinical");
+          return;
+        }
+        if (b.dataset.preset === "omf") {
+          setPresentation("teaching");
+          state.schematic = true;
+          state.layers = new Set([
+            "bones",
+            "teeth",
+            "gingiva",
+            "nerves",
+            "glands",
+            "soft",
+            "airway",
+          ]);
+          state.masticatory = true;
+          updateScene();
+          renderBrowser();
           return;
         }
         state.layers = new Set(
@@ -777,62 +882,32 @@ function renderBrowser() {
         renderBrowser();
       }),
   );
-  const schematicSwitch = browser.querySelector("[data-schematic]");
-  if (schematicSwitch)
-    schematicSwitch.onchange = () => {
-      state.schematic = schematicSwitch.checked;
-      updateScene();
-      renderBrowser();
+  browser.querySelector("#structures-visible-only")?.addEventListener("click", () => {
+    state.structuresVisibleOnly = !state.structuresVisibleOnly;
+    renderBrowser();
+  });
+  browser.querySelectorAll("[data-part]").forEach((button) => {
+    button.onclick = (e) => {
+      if (e.altKey) {
+        const part = atlas.parts.find((p) => p.id === button.dataset.part);
+        if (part) {
+          state.isolated = false;
+          state.toothDetail = false;
+          state.layers = new Set([part.group]);
+          updateScene();
+          renderBrowser();
+        }
+      }
+      selectPart(button.dataset.part);
     };
-  browser.querySelectorAll("[data-solo]").forEach(
-    (button) =>
-      (button.onclick = () => {
-        state.layers = new Set([button.dataset.solo]);
-        state.isolated = false;
-        state.toothDetail = false;
-        updateScene();
-        renderBrowser();
-      }),
-  );
-  browser.querySelectorAll("[data-layer]").forEach(
-    (input) =>
-      (input.onchange = () => {
-        state.isolated = false;
-        state.toothDetail = false;
-        input.checked
-          ? state.layers.add(input.dataset.layer)
-          : state.layers.delete(input.dataset.layer);
-        updateScene();
-        if (inventory) renderBrowser();
-      }),
-  );
-  browser
-    .querySelectorAll("[data-part]")
-    .forEach(
-      (button) => (button.onclick = () => selectPart(button.dataset.part)),
-    );
+  });
   const showHidden = browser.querySelector("#show-hidden");
   if (showHidden)
     showHidden.onclick = () => {
       state.hidden.clear();
-  state.masticatory = true;
+      updateScene();
       renderBrowser();
-      updateScene();
     };
-  const masticatory = browser.querySelector("[data-masticatory]");
-  if (masticatory)
-    masticatory.onchange = () => {
-      state.masticatory = masticatory.checked;
-      updateScene();
-    };
-  browser.querySelectorAll("[data-opacity]").forEach((slider) => {
-    slider.oninput = () => {
-      const value = Number(slider.value) / 100;
-      if (value >= 1) state.opacity.delete(slider.dataset.opacity);
-      else state.opacity.set(slider.dataset.opacity, value);
-      updateScene();
-    };
-  });
 }
 
 function setExplosion(progress) {
@@ -865,8 +940,68 @@ function heading(title, subtitle, tag = "Anatomy notes") {
   return `<div class="detail-heading"><span class="detail-tag">${tag}</span><h2>${title}</h2><p>${subtitle}</p></div>`;
 }
 
+function renderIntraoral(panel) {
+  const preset = INTRAORAL_PRESETS[state.intraoralPreset] ?? INTRAORAL_PRESETS.occlusal;
+  panel.innerHTML =
+    heading(
+      "Intra-oral view",
+      "Mirror-style camera and clinical enamel. CBCT jaws when installed; otherwise BodyParts3D oral surfaces.",
+      "Oral cavity",
+    ) +
+    `<p class="fine-print">${preset.hint}</p>
+    <label class="intraoral-model-select">Surface
+      <select id="intraoral-model">
+        <option value="openfulljaw" ${state.intraoralModel === "openfulljaw" ? "selected" : ""}>CBCT · Open-Full-Jaw</option>
+        <option value="toothfairy" ${state.intraoralModel === "toothfairy" ? "selected" : ""}>CBCT · ToothFairy3</option>
+        <option value="atlas" ${state.intraoralModel === "atlas" ? "selected" : ""}>Atlas · BodyParts3D</option>
+      </select>
+    </label>
+    <div class="intraoral-toggles">
+      <label><input type="checkbox" id="intraoral-focus" ${state.intraoralFocus ? "checked" : ""}> Dim other teeth</label>
+      <label><input type="checkbox" id="intraoral-bone" ${state.intraoralShowBone ? "checked" : ""}> Alveolar bone</label>
+      <label><input type="checkbox" id="intraoral-gingiva" ${state.layers.has("gingiva") ? "checked" : ""}> Gingiva</label>
+      <label><input type="checkbox" id="intraoral-tongue" ${state.layers.has("soft") ? "checked" : ""}> Tongue & floor</label>
+    </div>
+    <div class="section-label"><h3>Teeth</h3><span>FDI</span></div>
+    <div class="structure-list intraoral-teeth">${atlas.parts
+      .filter((p) => p.group === "teeth" && !p.schematic)
+      .sort((a, b) => (toothNumber(a.name) || 0) - (toothNumber(b.name) || 0))
+      .map(
+        (p) =>
+          `<button data-part="${p.id}" class="structure ${p.id === state.selected ? "selected" : ""}"><span>${toothNumber(p.name) || "—"}</span><span>${escape(displayName(p))}</span></button>`,
+      )
+      .join("")}</div>
+    <details class="intraoral-ref"><summary>References</summary><ul class="literature-list">${INTRAORAL_LITERATURE.map((r) => `<li><strong>${r.title}</strong><br>${r.cite}</li>`).join("")}</ul>
+    <p class="fine-print">Tooth-internal CBCT detail: <button type="button" class="text-button" data-goto-dental>Dental</button> tab.</p></details>`;
+  panel.querySelector("#intraoral-model")?.addEventListener("change", (e) => {
+    state.intraoralModel = e.target.value;
+    updateScene();
+  });
+  panel.querySelector("#intraoral-focus").onchange = (e) => {
+    state.intraoralFocus = e.target.checked;
+    updateScene();
+  };
+  panel.querySelector("#intraoral-bone").onchange = (e) => {
+    state.intraoralShowBone = e.target.checked;
+    updateScene();
+  };
+  panel.querySelector("#intraoral-gingiva").onchange = (e) => {
+    e.target.checked ? state.layers.add("gingiva") : state.layers.delete("gingiva");
+    updateScene();
+  };
+  panel.querySelector("#intraoral-tongue").onchange = (e) => {
+    e.target.checked ? state.layers.add("soft") : state.layers.delete("soft");
+    updateScene();
+  };
+  panel.querySelector("[data-goto-dental]").onclick = () => setTab("dental");
+  panel.querySelectorAll("[data-part]").forEach(
+    (b) => (b.onclick = () => selectPart(b.dataset.part)),
+  );
+}
+
 function renderInspector() {
   const panel = document.querySelector("#inspector");
+  if (state.tab === "intraoral") return renderIntraoral(panel);
   if (state.tab === "dental") return renderDental(panel);
   if (state.tab === "quiz") return renderQuiz(panel);
   if (state.tab === "study") {
@@ -1498,9 +1633,53 @@ function renderQuiz(panel) {
     };
 }
 
+function syncViewChrome() {
+  const intraoral = state.tab === "intraoral";
+  document.querySelector("#head-view-controls").hidden = intraoral;
+  document.querySelector("#intraoral-view-controls").hidden = !intraoral;
+  document.body.classList.toggle("intraoral-stage", intraoral);
+  document.querySelector(".stage-bottom")?.classList.toggle("hidden-intraoral", intraoral);
+  const mobileLib = document.querySelector("#mobile-library");
+  if (mobileLib && intraoral && touchLayout()) {
+    mobileLib.setAttribute("aria-label", "Intra-oral options and teeth");
+    mobileLib.title = "Surface, teeth, and toggles";
+  } else if (mobileLib) {
+    mobileLib.setAttribute("aria-label", "Layers and structure library");
+    mobileLib.title = "Layers and structure library";
+  }
+}
+
+function setIntraoralPreset(preset) {
+  if (!INTRAORAL_PRESETS[preset]) return;
+  state.intraoralPreset = preset;
+  document.querySelectorAll("[data-intraoral-view]").forEach((b) =>
+    b.classList.toggle("active", b.dataset.intraoralView === preset),
+  );
+  viewer?.viewIntraoral(preset);
+}
+
 function setTab(tab) {
   state.tab = tab;
+  syncViewChrome();
   if (tab !== "dental") state.toothDetail = false;
+  if (tab === "intraoral") {
+    state.arches = false;
+    state.explode = 0;
+    state.schematic = false;
+    state.isolated = false;
+    state.presentation = "clinical";
+    document.body.classList.add("presentation-clinical");
+    state.layers = new Set(INTRAORAL_LAYERS);
+    state.intraoralShowBone = true;
+    document.querySelector("#source-caption").textContent =
+      "Intra-oral studio · CBCT when installed";
+    showDetails(!touchLayout());
+    if (atlas) {
+      renderBrowser();
+      updateScene();
+      requestAnimationFrame(() => viewer?.viewIntraoral(state.intraoralPreset));
+    }
+  }
   if (tab === "anatomy") {
     state.arches = false;
     document.querySelector("#source-caption").textContent =
@@ -1516,17 +1695,21 @@ function setTab(tab) {
   // The published dental models are what this tab shows, so they start
   // arriving when the tab does rather than when the first tooth is opened.
   if (tab === "dental") viewer?.prefetchModels?.(state.toothSource);
+  if (tab === "intraoral" && state.intraoralModel !== "atlas")
+    viewer?.prefetchModels?.(state.intraoralModel);
   if (tab !== "dental") setMode("3d");
   document.querySelectorAll("[data-tab]").forEach((b) => {
     b.classList.toggle("active", b.dataset.tab === tab);
     b.setAttribute("aria-current", b.dataset.tab === tab ? "page" : "false");
   });
   document.querySelector("#stage-title").textContent =
-    tab === "dental"
-      ? "Tooth anatomy"
-      : tab === "quiz"
-        ? "Learn. Explore. Recall."
-        : "Head & neck";
+    tab === "intraoral"
+      ? "Intra-oral cavity"
+      : tab === "dental"
+        ? "Tooth anatomy"
+        : tab === "quiz"
+          ? "Learn. Explore. Recall."
+          : "Head & neck";
   if (tab === "dental" && atlas) {
     const part = partForTooth(atlas.parts, state.fdi);
     if (part) {
@@ -1733,6 +1916,11 @@ document
   .querySelectorAll("[data-mode]")
   .forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
 document.querySelector("#mobile-library").onclick = (e) => {
+  if (state.tab === "intraoral" && touchLayout()) {
+    if (document.body.classList.contains("details-open")) showDetails(false);
+    else showDetails(true);
+    return;
+  }
   const sidebar = document.querySelector(".sidebar");
   const inventory = state.explode >= INVENTORY_PERCENT && touchLayout();
   if (inventory) {
@@ -1778,16 +1966,24 @@ document.querySelectorAll("[data-view]").forEach(
         .forEach((v) => v.classList.toggle("active", v === b));
     }),
 );
+document.querySelectorAll("[data-intraoral-view]").forEach(
+  (b) => (b.onclick = () => setIntraoralPreset(b.dataset.intraoralView)),
+);
 document.querySelector("#zoom-in").onclick = () => viewer?.zoom(0.8);
 document.querySelector("#zoom-out").onclick = () => viewer?.zoom(1.25);
 document.querySelector("#fit").onclick = () => viewer?.view("oblique", true);
+document.querySelector("#intraoral-zoom-in").onclick = () => viewer?.zoom(0.82);
+document.querySelector("#intraoral-zoom-out").onclick = () => viewer?.zoom(1.22);
+document.querySelector("#intraoral-fit").onclick = () =>
+  viewer?.viewIntraoral(state.intraoralPreset);
 document.querySelector("#isolate").onclick = () => {
   if (atlas) toggleIsolate();
 };
 document.querySelector("#reset").onclick = () => {
   if (!atlas) return;
-  state.layers = new Set(DEFAULT_LAYERS);
+  state.layers = new Set(PRESENTATIONS[state.presentation]?.layers ?? DEFAULT_LAYERS);
   state.schematic = true;
+  state.structuresVisibleOnly = false;
   state.age = "adult";
   state.arches = false;
   state.toothDetail = false;
@@ -1823,14 +2019,47 @@ if (!isEmbed && readConsent() === null) showConsent(true);
 document.querySelector("#close-modal").onclick = () =>
   document.querySelector("#modal").close();
 document.addEventListener("click",e=>{if(e.target.closest("[data-clear-selection]") && atlas)clearSelection();});
+document.querySelector("#quality-mode").onclick = () => {
+  const i = QUALITY_CYCLE.indexOf(state.qualityMode);
+  setQualityMode(QUALITY_CYCLE[(i + 1) % QUALITY_CYCLE.length]);
+};
+document.querySelector("#shortcuts-help").onclick = () => showShortcuts();
 document.addEventListener("keydown", (e) => {
+  if (e.key === "?" && !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+    e.preventDefault();
+    showShortcuts();
+    return;
+  }
   if (e.key === "Escape" && atlas && !document.querySelector("#modal").open) clearSelection();
   if (
     e.key === "/" &&
     !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)
   ) {
     e.preventDefault();
+    shellNav?.openLayers();
     document.querySelector("#search").focus();
+  }
+  if (
+    e.key.toLowerCase() === "l" &&
+    !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)
+  ) {
+    e.preventDefault();
+    shellNav?.toggleLayers();
+  }
+  if (
+    e.key.toLowerCase() === "i" &&
+    !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)
+  ) {
+    e.preventDefault();
+    if (document.body.classList.contains("details-open")) showDetails(false);
+    else showDetails(true);
+  }
+  if (
+    e.key.toLowerCase() === "p" &&
+    !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)
+  ) {
+    e.preventDefault();
+    togglePresentation();
   }
 });
 
@@ -1869,7 +2098,18 @@ try {
             : "Building the anatomy";
     },
     onDetail: inspectTooth,
-    onToothSelect: (fdi) => inspectTooth(fdi),
+    onToothSelect: (fdi) => {
+      if (state.tab === "intraoral") {
+        const p = partForTooth(atlas.parts, fdi);
+        if (p) selectPart(p.id);
+        else {
+          state.fdi = fdi;
+          updateScene();
+        }
+        return;
+      }
+      inspectTooth(fdi);
+    },
     onExitDetail: exitTooth,
     onExplode: setExplosion,
     onHover: showHover,

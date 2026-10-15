@@ -14,11 +14,13 @@ Interactive embed surface for lesson iframes. Built as a second Vite entry (`emb
 | Param | Example | Effect |
 |-------|---------|--------|
 | `ui` | `minimal` | Hides footer, consent, analytics chrome; compacts chrome |
-| `scene` | `head`, `dental`, `development`, `study`, `quiz` | Initial tab / mode |
+| `scene` | `head`, `intraoral`, `dental`, `development`, `study`, `quiz` | Initial tab / mode |
 | `part` | `FJ3289` or FDI `36` | Select structure after load |
 | `theme` | `light` / `dark` | Theme before first paint |
 | `modes` | `anatomy,dental` | Allowlist main tabs in the tab bar |
 | `parentOrigin` | `https://app.fakarny.example` | Restrict incoming `postMessage` (dev allows any origin) |
+| `quality` | `smooth`, `balanced`, `quality` | GPU/quality preset (default: device-based) |
+| `presentation` | `teaching`, `clinical` | Surface preset (default: stored preference or clinical) |
 
 Google Analytics and the consent banner are **not** loaded on the embed entry.
 

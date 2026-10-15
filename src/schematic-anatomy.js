@@ -146,11 +146,11 @@ export function deriveAnchors(parts, readVertices) {
   const molarOcclusal = Math.max(tooth(37).crown[1], tooth(47).crown[1]);
   const mandibularForamen = (s) => {
     const band = (v) =>
-      sideOf(s)(v) && Math.abs(v[1] - molarOcclusal) < 0.005 && v[2] > -0.004 && v[2] < 0.018;
+      sideOf(s)(v) && Math.abs(v[1] - molarOcclusal) < 0.006 && v[2] > -0.002 && v[2] < 0.020;
     const medial = extreme(mandibleVertices, band, (v) => -Math.abs(v[0]));
-    const at = medial || [s * 0.034, molarOcclusal, 0.012];
-    // A little medial to the bone surface, where the canal mouth actually is.
-    return [at[0] - s * 0.0015, at[1], at[2]];
+    const at = medial || [s * 0.028, molarOcclusal, 0.014];
+    // Step 2 mm medial from the lingual cortical surface (canal mouth).
+    return [at[0] - s * 0.002, at[1], at[2]];
   };
   const ramusPosterior = (s) =>
     extreme(mandibleVertices, sideOf(s), (v) => -v[2]);
@@ -210,14 +210,46 @@ export function deriveAnchors(parts, readVertices) {
   // Pterygopalatine fossa: behind the tuberosity, medial to the ramus. Where
   // the maxillary nerve and the terminal maxillary artery meet.
   const pterygopalatineFossa = (s) => {
-    const at = tuberosity(s);
-    return [at[0] * 0.86, at[1] + 0.005, at[2] - 0.008];
+    const tub = tuberosity(s);
+    const infra = infraorbitalForamen(s);
+    // Medial to the tuberosity, anterior to the mandibular neck — the V2 ganglion field.
+    return [tub[0] * 0.9 + infra[0] * 0.1, tub[1] + 0.007, tub[2] + 0.001];
   };
-  // Foramen ovale: the mandibular nerve's exit from the middle cranial fossa,
-  // above and medial to the pterygopalatine fossa.
+  // Foramen ovale: mandibular nerve exit on the skull base, lateral to the pterygoid
+  // plates and superior to the mandibular foramen (infratemporal fossa).
   const foramenOvale = (s) => {
+    const mf = mandibularForamen(s);
+    const head = condyle(s);
+    const post = ramusPosterior(s);
+    const lateralX =
+      s < 0
+        ? Math.min(mf[0] * 0.5 + head[0] * 0.5, mf[0] - 0.004)
+        : Math.max(mf[0] * 0.5 + head[0] * 0.5, mf[0] + 0.004);
+    return [lateralX, mf[1] + 0.013, mf[2] * 0.5 + post[2] * 0.5 - 0.001];
+  };
+  // Foramen rotundum: maxillary nerve entry into the pterygopalatine fossa.
+  const foramenRotundum = (s) => {
     const fossa = pterygopalatineFossa(s);
-    return [fossa[0] * 0.92, fossa[1] + 0.014, fossa[2] - 0.012];
+    const ov = foramenOvale(s);
+    return [fossa[0] * 0.72 + ov[0] * 0.28, fossa[1] + 0.012, fossa[2] - 0.006];
+  };
+  /** Shared V3 trunk: foramen ovale → infratemporal bend → mandibular foramen. */
+  const mandibularNerveTrunk = (s) => {
+    const ov = foramenOvale(s);
+    const mf = mandibularForamen(s);
+    const head = condyle(s);
+    const bend = [
+      head[0] * 0.62 + ov[0] * 0.38,
+      ov[1] * 0.35 + mf[1] * 0.65 + 0.003,
+      ov[2] * 0.45 + mf[2] * 0.55,
+    ];
+    return [
+      shift(ov, 0, 0.005, -0.003),
+      ov,
+      bend,
+      mid(bend, mf, 0.55),
+      mf,
+    ];
   };
   // Stylomastoid foramen: under the temporal bone behind the condyle, where
   // the facial nerve leaves the skull.
@@ -260,6 +292,8 @@ export function deriveAnchors(parts, readVertices) {
     tuberosity,
     pterygopalatineFossa,
     foramenOvale,
+    foramenRotundum,
+    mandibularNerveTrunk,
     stylomastoidForamen,
     carotidBifurcation,
     submandibularBounds: (s) => submandibularGland(s).bounds,
@@ -289,12 +323,8 @@ const STRUCTURES = [
     name: "Mandibular nerve (V3)",
     group: "nerves",
     radius: CALIBER.trunk,
-    note: "Third division of the trigeminal nerve, leaving the skull through the foramen ovale and dividing into the branches that supply the lower teeth, the tongue, and the muscles of mastication.",
-    path: (a, s) => [
-      shift(a.foramenOvale(s), 0, 0.008, -0.003),
-      a.foramenOvale(s),
-      mid(a.foramenOvale(s), a.mandibularForamen(s), 0.55),
-    ],
+    note: "Third division of the trigeminal nerve, leaving the skull through the foramen ovale, passing between the pterygoid muscles, and entering the mandibular foramen before dividing.",
+    path: (a, s) => a.mandibularNerveTrunk(s),
   },
   {
     key: "inferior-alveolar-nerve",
@@ -306,7 +336,6 @@ const STRUCTURES = [
       const under = (fdi, drop) => shift(a.tooth(fdi).apex, 0, -drop, 0);
       const right = s < 0;
       return [
-        mid(a.foramenOvale(s), a.mandibularForamen(s), 0.55),
         a.mandibularForamen(s),
         under(right ? 47 : 37, 0.0035),
         under(right ? 46 : 36, 0.0035),
@@ -354,13 +383,14 @@ const STRUCTURES = [
     radius: CALIBER.branch,
     note: "Passes forward medial to the inferior alveolar nerve and above the mylohyoid line, close to the lingual plate at the third molar, then spreads into the floor of the mouth and the front two thirds of the tongue.",
     path: (a, s) => {
+      const trunk = a.mandibularNerveTrunk(s);
       const foramen = a.mandibularForamen(s);
       const third = a.tooth(s < 0 ? 47 : 37);
       const first = a.tooth(s < 0 ? 46 : 36);
       const canine = a.tooth(s < 0 ? 43 : 33);
       return [
-        mid(a.foramenOvale(s), foramen, 0.6),
-        shift(foramen, -s * 0.004, 0.002, 0.004),
+        trunk[trunk.length - 2],
+        shift(foramen, -s * 0.004, 0.002, 0.003),
         shift(third.lingual(0.002), 0, -0.004, -0.002),
         shift(first.lingual(0.003), 0, -0.006, 0),
         shift(canine.lingual(0.004), 0, -0.006, 0),
@@ -374,10 +404,11 @@ const STRUCTURES = [
     radius: CALIBER.twig,
     note: "Crosses in front of the ramus to reach the cheek and the buccal gingiva of the lower molars. Sensory only; it does not supply the buccinator.",
     path: (a, s) => {
+      const trunk = a.mandibularNerveTrunk(s);
       const coronoidTip = a.coronoid(s);
       const molar = a.tooth(s < 0 ? 46 : 36);
       return [
-        mid(a.foramenOvale(s), a.mandibularForamen(s), 0.45),
+        trunk[2],
         shift(coronoidTip, s * 0.002, -0.008, 0.004),
         shift(molar.buccal(0.006), 0, 0.004, 0.002),
       ];
@@ -390,11 +421,12 @@ const STRUCTURES = [
     radius: CALIBER.twig,
     note: "Branches off the inferior alveolar nerve just before it enters the mandibular foramen and runs down the mylohyoid groove to the mylohyoid and the anterior belly of digastric.",
     path: (a, s) => {
+      const trunk = a.mandibularNerveTrunk(s);
       const foramen = a.mandibularForamen(s);
       const notch = a.facialNotch(s);
       return [
-        shift(foramen, 0, 0.003, 0.001),
-        shift(foramen, -s * 0.002, -0.008, 0.008),
+        trunk[trunk.length - 2],
+        shift(foramen, -s * 0.001, -0.004, 0.004),
         shift(notch, -s * 0.006, 0.004, 0.014),
       ];
     },
@@ -406,10 +438,11 @@ const STRUCTURES = [
     radius: CALIBER.twig,
     note: "Passes behind the neck of the mandible with the superficial temporal vessels and climbs in front of the ear. It also carries the secretomotor supply to the parotid gland.",
     path: (a, s) => {
+      const trunk = a.mandibularNerveTrunk(s);
       const head = a.condyle(s);
       const [, hi] = a.temporalBounds(s);
       return [
-        mid(a.foramenOvale(s), head, 0.4),
+        trunk[1],
         shift(head, s * 0.004, -0.004, -0.008),
         shift(head, s * 0.006, 0.010, -0.006),
         [head[0] * 1.04, hi[1] - 0.006, head[2] - 0.004],
@@ -423,10 +456,17 @@ const STRUCTURES = [
     name: "Maxillary nerve (V2)",
     group: "nerves",
     radius: CALIBER.trunk,
-    note: "Second division of the trigeminal nerve, crossing the pterygopalatine fossa on its way to the infraorbital canal.",
+    note: "Second division of the trigeminal nerve, entering the pterygopalatine fossa through the foramen rotundum before branching to the upper jaw and midface.",
     path: (a, s) => {
+      const rot = a.foramenRotundum(s);
       const fossa = a.pterygopalatineFossa(s);
-      return [shift(fossa, -s * 0.006, 0.006, -0.012), fossa, shift(fossa, 0, 0.004, 0.008)];
+      const infra = a.infraorbitalForamen(s);
+      return [
+        shift(rot, 0, 0.006, -0.004),
+        rot,
+        fossa,
+        mid(fossa, infra, 0.3),
+      ];
     },
   },
   {
@@ -439,8 +479,9 @@ const STRUCTURES = [
       const fossa = a.pterygopalatineFossa(s);
       const foramen = a.infraorbitalForamen(s);
       return [
-        shift(fossa, 0, 0.004, 0.008),
-        mid(shift(fossa, 0, 0.006, 0.01), foramen, 0.55),
+        fossa,
+        mid(fossa, foramen, 0.35),
+        mid(fossa, foramen, 0.65),
         foramen,
         shift(foramen, 0, -0.003, 0.006),
       ];
@@ -587,6 +628,96 @@ const STRUCTURES = [
       ];
     },
   })),
+
+  // Trigeminal V1 (source dataset has only orbital nerves, not this division).
+  {
+    key: "v1",
+    name: "Ophthalmic nerve (V1)",
+    group: "nerves",
+    radius: CALIBER.trunk,
+    note: "First division of the trigeminal nerve, supplying the forehead, upper eyelid and cornea. Schematic trunk toward the supraorbital region; orbital branches in the source mesh are separate concepts.",
+    path: (a, s) => {
+      const infra = a.infraorbitalForamen(s);
+      return [
+        shift(infra, -s * 0.010, 0.020, -0.012),
+        shift(infra, -s * 0.006, 0.014, -0.008),
+        shift(infra, 0, 0.010, -0.006),
+      ];
+    },
+  },
+  {
+    key: "supraorbital-nerve",
+    name: "Supraorbital nerve",
+    group: "nerves",
+    radius: CALIBER.twig,
+    note: "Terminal branch of the frontal nerve (V1), emerging at the supraorbital notch to supply the forehead and scalp.",
+    path: (a, s) => {
+      const infra = a.infraorbitalForamen(s);
+      const brow = shift(infra, 0, 0.010, -0.004);
+      return [
+        brow,
+        shift(brow, -s * 0.004, 0.008, 0.002),
+        shift(brow, -s * 0.006, 0.016, 0.004),
+      ];
+    },
+  },
+
+  {
+    key: "chorda-tympani",
+    name: "Chorda tympani",
+    group: "nerves",
+    radius: CALIBER.twig,
+    note: "Branch of the facial nerve carrying taste from the anterior two thirds of the tongue. Crosses the middle ear and joins the lingual nerve in the infratemporal fossa.",
+    path: (a, s) => {
+      const st = a.stylomastoidForamen(s);
+      const third = a.tooth(s < 0 ? 47 : 37);
+      const lingualJoin = shift(a.mandibularForamen(s), -s * 0.0035, -0.001, 0.005);
+      return [
+        shift(st, 0, 0.007, -0.003),
+        shift(st, -s * 0.002, 0.004, 0.008),
+        lingualJoin,
+        shift(third.lingual(0.003), 0, -0.004, 0),
+      ];
+    },
+  },
+  {
+    key: "greater-auricular-nerve",
+    name: "Greater auricular nerve",
+    group: "nerves",
+    radius: CALIBER.twig,
+    note: "Cervical plexus branch (C2–C3) crossing the sternocleidomastoid to supply skin over the parotid, mastoid and angle of the mandible.",
+    path: (a, s) => {
+      const bif = a.carotidBifurcation(s);
+      const head = a.condyle(s);
+      return [
+        shift(bif, -s * 0.005, -0.014, 0.008),
+        shift(head, s * 0.010, -0.008, -0.012),
+        shift(head, s * 0.014, 0.006, -0.016),
+      ];
+    },
+  },
+  {
+    key: "hypoglossal-nerve",
+    name: "Hypoglossal nerve (XII)",
+    group: "nerves",
+    radius: CALIBER.branch,
+    note: "Motor to the tongue. Leaves the skull through the hypoglossal canal and descends to the submandibular region before turning forward into the tongue.",
+    path: (a, s) => {
+      const head = a.condyle(s);
+      const [lo] = a.temporalBounds(s);
+      const exit = [head[0] * 0.92, head[1] - 0.006, lo[2] + 0.010];
+      const hyoidCenter = a.hyoidBounds ? boundsCenter(a.hyoidBounds) : [0, 1.48, 0.02];
+      const tongueBase = a.tongueBounds
+        ? boundsCenter(a.tongueBounds)
+        : [s * 0.008, 1.505, 0.018];
+      return [
+        shift(exit, 0, 0.006, -0.004),
+        exit,
+        shift(hyoidCenter, -s * 0.006, 0.004, 0.006),
+        tongueBase,
+      ];
+    },
+  },
 
   // External carotid artery and the branches that matter in the jaws.
   {
@@ -1045,13 +1176,13 @@ function tubeGeometry(waypoints, radius) {
   // Segment count follows the path length so a long vessel does not turn into
   // a faceted stick and a short twig does not carry pointless triangles.
   const segments = Math.min(96, Math.max(24, Math.round(curve.getLength() / 0.0015)));
-  return new THREE.TubeGeometry(curve, segments, radius, 10, false);
+  return new THREE.TubeGeometry(curve, segments, radius, 14, false);
 }
 
 function volumeGeometry({ center, radii }) {
   if (![...center, ...radii].every(Number.isFinite))
     throw new Error("A schematic volume resolved to a non-finite value");
-  const geometry = new THREE.SphereGeometry(1, 24, 16);
+  const geometry = new THREE.SphereGeometry(1, 28, 18);
   geometry.scale(radii[0], radii[1], radii[2]);
   geometry.translate(center[0], center[1], center[2]);
   return geometry;

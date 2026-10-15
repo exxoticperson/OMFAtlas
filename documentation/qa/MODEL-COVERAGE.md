@@ -53,7 +53,7 @@ Added September 6, 2026. `src/schematic-anatomy.js` builds 77 structures that th
 
 | Group | Built | Notes |
 | --- | ---: | --- |
-| Nerves | 43 | V3 with the inferior alveolar, mental, incisive, lingual, buccal, mylohyoid and auriculotemporal branches; V2 with the infraorbital, posterior/middle/anterior superior alveolar, greater and lesser palatine branches; the midline nasopalatine nerve; the facial nerve trunk and its five terminal branches |
+| Nerves | 51 | V3 branches (IAN, mental, incisive, lingual, buccal, mylohyoid, auriculotemporal); V2 branches (infraorbital, PSA/MSA/ASA, palatine nerves, nasopalatine); V1 trunk and supraorbital (schematic); facial nerve trunk and five terminal branches; chorda tympani; greater auricular; hypoglossal (XII) |
 | Arteries | 16 | External carotid, lingual, facial, maxillary, inferior alveolar, superficial temporal, posterior superior alveolar, greater palatine |
 | Veins | 8 | Facial, retromandibular, external jugular, pterygoid plexus |
 | Glands | 6 | Parotid gland, parotid duct, submandibular duct |
@@ -62,4 +62,4 @@ Added September 6, 2026. `src/schematic-anatomy.js` builds 77 structures that th
 
 Every one of these carries `schematic: true`, is badged in the structure list, the hover label and the inspector, and can be hidden as a set. Courses are fitted at run time to landmarks measured on the licensed meshes, never typed in; `tests/schematic-anatomy.test.mjs` asserts those anchoring rules.
 
-Still absent from both the source and the schematic set: the glossopharyngeal, vagus, accessory and hypoglossal nerves; the chorda tympani, which joins the lingual nerve and carries taste from the front of the tongue; the pterygopalatine, submandibular and otic ganglia; the palatine tonsils; the cervical lymph nodes; and the frontal, ethmoid and sphenoid sinuses. Independent dental-specialist review of the schematic courses has not been carried out.
+Still absent from both the source and the schematic set: the glossopharyngeal, vagus and accessory nerves; the pterygopalatine, submandibular and otic ganglia; the palatine tonsils; the cervical lymph nodes; and the frontal, ethmoid and sphenoid sinuses. Independent dental-specialist review of the schematic courses has not been carried out.

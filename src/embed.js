@@ -19,6 +19,12 @@ function readEmbedSearchParams() {
     parentOrigin,
     modes: modes ? modes.split(",").map((m) => m.trim()).filter(Boolean) : null,
     analytics: params.get("analytics") !== "1",
+    quality: params.get("quality") || undefined,
+    presentation:
+      params.get("presentation") === "teaching" ||
+      params.get("presentation") === "clinical"
+        ? params.get("presentation")
+        : undefined,
   };
 }
 

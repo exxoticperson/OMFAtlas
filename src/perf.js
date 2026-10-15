@@ -15,8 +15,18 @@ export function pixelRatioCap(tier) {
 }
 
 /** Small / numerous structures do not need transmission or sheen. */
+export const QUALITY_KEY = "omf-quality-mode";
+
+export function readQualityMode() {
+  try {
+    const v = localStorage.getItem(QUALITY_KEY);
+    if (v === "smooth" || v === "balanced" || v === "quality") return v;
+  } catch {}
+  return performanceTier() === "low" ? "smooth" : "balanced";
+}
+
 export function preferLiteMaterial(part) {
-  if (part.schematic) return true;
+  if (part.schematic) return false;
   const g = part.group;
   return (
     g === "nerves" ||

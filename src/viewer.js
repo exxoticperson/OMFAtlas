@@ -4,10 +4,24 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { MASTICATORY, groups, toothNumber } from "./content.js";
 import {
   applyFinishToMaterial,
+  materialEmissive,
+  materialEmissiveIntensity,
   partColor,
   surfaceKind,
   SURFACE_FINISH_V2,
+  toneMappingExposureFor,
 } from "./realism-v2.js";
+import {
+  INTRAORAL_PRESETS,
+  intraoralHighResEligible,
+  intraoralStatusMessage,
+  intraoralVisible,
+  isIntraoralEligible,
+  oralLookKey,
+  setOralStudioLighting,
+  SHIPPED_HR_PART_IDS,
+  syncOralLook,
+} from "./intraoral.js";
 import { performanceTier, pixelRatioCap, preferLiteMaterial } from "./perf.js";
 import { createExplosionLayout, explodedOffset, explosionControls, explosionStage, smoothstep } from "./explosion-layout.js";
 import { createSchematicParts, deriveLandmarks } from "./schematic-anatomy.js";
@@ -69,7 +83,7 @@ export async function createViewer(host, atlas, handlers) {
   // ACES keeps the pale bone and enamel from clipping under the key light and
   // rolls the highlights off the way a photograph does.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  renderer.toneMappingExposure = 1.12;
   renderer.localClippingEnabled = true;
   host.append(renderer.domElement);
   renderer.domElement.setAttribute(
@@ -81,6 +95,8 @@ export async function createViewer(host, atlas, handlers) {
   // settles, which reads as weight. The frame loop below drives the damping.
   controls.enableDamping = true;
   controls.dampingFactor = 0.092;
+  const defaultDamping = 0.092;
+  const intraoralDamping = 0.108;
   controls.zoomToCursor = true;
   controls.minDistance = 0.008;
   controls.maxDistance = 1.2;
@@ -98,17 +114,22 @@ export async function createViewer(host, atlas, handlers) {
   // A three point rig in a camera-relative frame would shift as the reader
   // orbits; these are fixed in the scene, so the head keeps one consistent
   // lit side, which is what lets a reader read relief while turning it.
-  const ambient = new THREE.HemisphereLight(0xf4f6ff, 0x6f6a66, 0.55);
+  const ambient = new THREE.HemisphereLight(0xf2f4fa, 0x7a756f, 0.52);
   scene.add(ambient);
-  const light = new THREE.DirectionalLight(0xfff1e0, 2.6);
+  const light = new THREE.DirectionalLight(0xfff0dc, 2.35);
   light.position.set(-1.4, 2.2, 2.6);
   scene.add(light);
-  const fill = new THREE.DirectionalLight(0xdce8ff, 0.7);
+  const fill = new THREE.DirectionalLight(0xd8e4f8, 0.85);
   fill.position.set(2.2, 0.6, 1.4);
   scene.add(fill);
-  const rim = new THREE.DirectionalLight(0xbcd0ff, 1.9);
+  const rim = new THREE.DirectionalLight(0xc8d8f0, 1.65);
   rim.position.set(0.8, 1.6, -3);
   scene.add(rim);
+  const oralPoint = new THREE.PointLight(0xfff6ea, 0, 0.22);
+  oralPoint.position.set(0.02, 1.548, 0.06);
+  oralPoint.visible = false;
+  scene.add(oralPoint);
+  const lightRig = { ambient, key: light, fill, rim, oralPoint };
   // What each kind of tissue looks like under the same light. Bone is dry and
   // diffuse; enamel is hard with a thin glaze; soft tissue is damp, a low
   // broad clearcoat with a velvet sheen at grazing angles; vessels and nerves
@@ -182,27 +203,23 @@ export async function createViewer(host, atlas, handlers) {
     const lite = preferLiteMaterial(part);
     const MaterialCtor = lite ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
     const material = new MaterialCtor({
-      color: groups[part.group].color,
+      color: partColor(part, groups, { presentation: "clinical" }),
       metalness: 0,
       side: THREE.DoubleSide,
-      ...(part.schematic
-        ? {
-            roughness: 0.82,
-            emissive: groups[part.group].color,
-            emissiveIntensity: 0.12,
-            envMapIntensity: 0.45,
-          }
-        : finish),
+      emissive: "#000000",
+      emissiveIntensity: 0,
+      ...(part.schematic ? { roughness: 0.65, envMapIntensity: 0.55 } : finish),
     });
-    if (!part.schematic && !lite) {
+    if (!lite || part.schematic) {
       applyFinishToMaterial(material, part, {
-        schematic: false,
+        schematic: !!part.schematic,
         presentation: "clinical",
       });
-    } else if (!part.schematic && lite) {
+    } else {
       material.roughness = finish.roughness ?? 0.55;
       material.envMapIntensity = (finish.envMapIntensity ?? 0.8) * 0.85;
     }
+    if (part.schematic) geometry.computeVertexNormals();
     const mesh = new THREE.Mesh(geometry, material);
     mesh.userData.part = part;
     scene.add(mesh);
@@ -454,6 +471,11 @@ export async function createViewer(host, atlas, handlers) {
     detailPending = false;
   let highResolution = new Map();
   const loadingDetail = new Set();
+  let intraoralHrPass = false;
+  let lastAppTab = "";
+  let cachedOralLookKey = "";
+  /** @type {{ fromPos: THREE.Vector3, fromTarget: THREE.Vector3, fromUp: THREE.Vector3, toPos: THREE.Vector3, toTarget: THREE.Vector3, toUp: THREE.Vector3, t: number } | null} */
+  let oralCameraTween = null;
   function resolutionStatus(text) {
     host.dataset.resolution = text;
     const label = document.querySelector("#resolution-status");
@@ -506,6 +528,80 @@ export async function createViewer(host, atlas, handlers) {
     } finally {
       loadingDetail.delete(id);
     }
+  }
+  async function upgradeIntraoralHighRes() {
+    if (intraoralHrPass || highResolution.size === 0) return;
+    intraoralHrPass = true;
+    const candidates = meshes.filter(
+      (m) =>
+        intraoralHighResEligible(m.userData.part) &&
+        SHIPPED_HR_PART_IDS.has(m.userData.part.id) &&
+        highResolution.has(m.userData.part.id) &&
+        !m.userData.highResolution,
+    );
+    if (!candidates.length) {
+      if (currentState?.tab === "intraoral" && !dentalModel?.userData.publishedArch)
+        resolutionStatus(intraoralStatusMessage({ cbctReady: false }));
+      return;
+    }
+    resolutionStatus("Loading intra-oral surface detail…");
+    let done = 0;
+    for (const mesh of candidates) {
+      const part = highResolution.get(mesh.userData.part.id);
+      try {
+        const response = await fetch(part.url);
+        if (!response.ok) continue;
+        const detailBuffer = await response.arrayBuffer();
+        const geometry = geometryFrom(part, detailBuffer);
+        mesh.geometry.dispose();
+        mesh.geometry = geometry;
+        mesh.userData.highResolution = true;
+        done++;
+      } catch {
+        /* retain optimized mesh */
+      }
+    }
+    if (currentState?.tab === "intraoral" && !dentalModel?.userData.publishedArch)
+      resolutionStatus(intraoralStatusMessage({ cbctReady: false }));
+    cachedOralLookKey = "";
+    layoutKey = "";
+    applyExplosion();
+    render();
+  }
+  function viewIntraoral(preset = "occlusal") {
+    const cfg = INTRAORAL_PRESETS[preset] ?? INTRAORAL_PRESETS.occlusal;
+    currentDirection = preset;
+    const center = new THREE.Vector3(0, 1.542, 0.038);
+    const box = new THREE.Box3();
+    if (dentalModel?.visible) box.expandByObject(dentalModel);
+    else meshes.filter((m) => m.visible).forEach((m) => box.expandByObject(m));
+    if (!box.isEmpty()) center.copy(box.getCenter(new THREE.Vector3()));
+    const size = box.isEmpty() ? 0.14 : box.getSize(new THREE.Vector3()).length();
+    const compact = (host.clientWidth || 1) < 768;
+    if (compact && !box.isEmpty()) center.y -= size * 0.1;
+    const scale = (cfg.distanceScale ?? 1) * (compact ? 1.08 : 1);
+    const distance = Math.max(
+      0.045,
+      (size * 0.55 * scale) / Math.max(0.62, Math.min(camera.aspect, 1)),
+    );
+    const toUp = new THREE.Vector3(0, preset === "occlusal" ? 0 : 1, preset === "occlusal" ? -1 : 0);
+    const offset = new THREE.Vector3(...cfg.vector).normalize().multiplyScalar(distance);
+    const toPos = center.clone().add(offset);
+    const toTarget = center.clone();
+    controls.maxDistance = Math.max(0.35, distance * 3);
+    camera.far = 2;
+    renderer.toneMappingExposure = toneMappingExposureFor("clinical");
+    oralCameraTween = {
+      fromPos: camera.position.clone(),
+      fromTarget: controls.target.clone(),
+      fromUp: camera.up.clone(),
+      toPos,
+      toTarget,
+      toUp,
+      t: 0,
+    };
+    framing = true;
+    renderBudget = 8;
   }
   fetch("/models/high-resolution/atlas.json")
     .then((r) => {
@@ -673,6 +769,27 @@ export async function createViewer(host, atlas, handlers) {
       if (settleView && shown === 0) {
         settleView = false;
         view(currentDirection);
+      }
+    }
+    if (oralCameraTween) {
+      oralCameraTween.t = Math.min(1, oralCameraTween.t + delta * 4.5);
+      const u = smoothstep(oralCameraTween.t);
+      camera.position.lerpVectors(
+        oralCameraTween.fromPos,
+        oralCameraTween.toPos,
+        u,
+      );
+      controls.target.lerpVectors(
+        oralCameraTween.fromTarget,
+        oralCameraTween.toTarget,
+        u,
+      );
+      camera.up.lerpVectors(oralCameraTween.fromUp, oralCameraTween.toUp, u).normalize();
+      camera.updateProjectionMatrix();
+      renderBudget = Math.max(renderBudget, 4);
+      if (oralCameraTween.t >= 1) {
+        oralCameraTween = null;
+        framing = false;
       }
     }
     controls.update();
@@ -1061,17 +1178,36 @@ export async function createViewer(host, atlas, handlers) {
     update(state) {
       const previousExplosion = explosion;
       currentState = state;
+      const intraoralTab = state.tab === "intraoral";
+      const q = state.qualityMode || "balanced";
+      const w = host.clientWidth || 1;
+      const h = host.clientHeight || 1;
+      if (q === "smooth") {
+        renderer.setPixelRatio(1);
+      } else if (q === "quality") {
+        renderer.setPixelRatio(
+          Math.min(devicePixelRatio || 1, pixelRatioCap("high")),
+        );
+      } else {
+        renderer.setPixelRatio(pixelRatioFor(w, h));
+      }
       explosion = Number.isFinite(state.explode) ? THREE.MathUtils.clamp(state.explode, 0, 100) : 0;
       // The key has to carry which patient the tooth or arch is coming from,
       // or switching between them rebuilds nothing.
+      const useCbctIntraoral =
+        intraoralTab &&
+        state.age === "adult" &&
+        state.intraoralModel !== "atlas";
       const key =
         state.mode === "models"
           ? `model-${state.modelView}`
-          : state.toothDetail
-            ? `tooth-${state.fdi}-${state.toothSource}`
-            : state.arches || state.age !== "adult"
-              ? `${state.age}-${state.archSource}-${state.toothSource}`
-              : "";
+          : useCbctIntraoral
+            ? `intraoral-${state.intraoralModel || "openfulljaw"}`
+            : state.toothDetail
+              ? `tooth-${state.fdi}-${state.toothSource}`
+              : state.arches || state.age !== "adult"
+                ? `${state.age}-${state.archSource}-${state.toothSource}`
+                : "";
       if (key !== dentalKey) {
         detailExitDistance = Infinity;
         if (dentalModel) disposeModel(dentalModel);
@@ -1098,6 +1234,45 @@ export async function createViewer(host, atlas, handlers) {
               .catch((error) =>
                 onPartsChanged({ failed: 1, message: error.message }),
               );
+        } else if (key.startsWith("intraoral-")) {
+          const source = key.slice("intraoral-".length);
+          const published =
+            state.age === "adult"
+              ? createPublishedDentitionModel(
+                  dentalModels?.manifest,
+                  dentalModels?.buffers,
+                  source,
+                )
+              : null;
+          const need = dentalModels
+            ? buffersForArch(dentalModels.manifest, source)
+            : null;
+          const awaitingPublished =
+            !published &&
+            state.age === "adult" &&
+            (!dentalModels ||
+              (canLoad(need) && publishedArchExists(source)));
+          if (published) dentalModel = published;
+          else if (awaitingPublished) {
+            dentalModel = null;
+            resolutionStatus("Loading patient CBCT jaws…");
+            loadDentalModels((m) => buffersForArch(m, source))
+              .then(() => {
+                dentalKey = "";
+                if (currentState) api.update(currentState);
+                onModelsReady();
+                if (currentState?.tab === "intraoral")
+                  viewIntraoral(currentState.intraoralPreset || "occlusal");
+              })
+              .catch((error) => {
+                resolutionStatus(intraoralStatusMessage({ cbctReady: false }));
+                dentalKey = "";
+                if (currentState) api.update(currentState);
+              });
+          } else {
+            dentalModel = null;
+            resolutionStatus(intraoralStatusMessage({ cbctReady: false }));
+          }
         } else if (key) {
           const published =
             state.age !== "adult"
@@ -1186,8 +1361,13 @@ export async function createViewer(host, atlas, handlers) {
           (state.mode === "models" ||
             dentalModel.userData.published ||
             dentalModel.userData.publishedArch)
-        )
-          requestAnimationFrame(() => view("oblique", true));
+        ) {
+          if (state.tab === "intraoral")
+            requestAnimationFrame(() =>
+              viewIntraoral(state.intraoralPreset || "occlusal"),
+            );
+          else requestAnimationFrame(() => view("oblique", true));
+        }
       }
       if (
         dentalModel &&
@@ -1209,13 +1389,27 @@ export async function createViewer(host, atlas, handlers) {
         }
       }
       if (dentalModel?.userData.publishedArch) {
-        resolutionStatus(dentalModel.userData.publishedArch.caption);
-        for (const mesh of dentalModel.children) {
-          mesh.visible = !state.hiddenTissues.has(mesh.userData.tissue);
-          const fade = state.opacity?.get(`model-${mesh.userData.tissue}`) ?? 1;
-          mesh.material.transparent = fade < 1;
-          mesh.material.opacity = fade;
-          mesh.material.depthWrite = fade >= 1;
+        if (intraoralTab) {
+          resolutionStatus(
+            intraoralStatusMessage({
+              cbctReady: true,
+              archSource: dentalModel.userData.publishedArch.id,
+            }),
+          );
+          for (const mesh of dentalModel.children) {
+            const tissue = mesh.userData.tissue;
+            mesh.visible =
+              tissue !== "bone" || state.intraoralShowBone !== false;
+          }
+        } else {
+          resolutionStatus(dentalModel.userData.publishedArch.caption);
+          for (const mesh of dentalModel.children) {
+            mesh.visible = !state.hiddenTissues.has(mesh.userData.tissue);
+            const fade = state.opacity?.get(`model-${mesh.userData.tissue}`) ?? 1;
+            mesh.material.transparent = fade < 1;
+            mesh.material.opacity = fade;
+            mesh.material.depthWrite = fade >= 1;
+          }
         }
       }
       if (dentalModel && state.toothDetail && dentalModel.userData.published) {
@@ -1248,12 +1442,43 @@ export async function createViewer(host, atlas, handlers) {
         );
       }
       if (!dentalModel?.userData.published) renderer.clippingPlanes = [];
+      if (state.tab !== lastAppTab) {
+        lastAppTab = state.tab;
+        cachedOralLookKey = "";
+        if (state.tab === "intraoral") {
+          setOralStudioLighting(lightRig, true);
+          controls.dampingFactor = intraoralDamping;
+          intraoralHrPass = false;
+          upgradeIntraoralHighRes();
+        } else {
+          setOralStudioLighting(lightRig, false);
+          controls.dampingFactor = defaultDamping;
+          oralCameraTween = null;
+        }
+      }
+      if (intraoralTab) {
+        const lookKey = oralLookKey(state, dentalKey);
+        if (lookKey !== cachedOralLookKey) {
+          cachedOralLookKey = lookKey;
+          syncOralLook({
+            state,
+            groups,
+            atlasParts: atlas.parts,
+            meshes,
+            dentalModel,
+            lightRig,
+          });
+        }
+      } else if (cachedOralLookKey) {
+        cachedOralLookKey = "";
+      }
       const presentation = state.presentation || "clinical";
       if (cachedPresentation !== presentation) {
         cachedPresentation = presentation;
+        renderer.toneMappingExposure = toneMappingExposureFor(presentation);
         for (const mesh of meshes) {
           const p = mesh.userData.part;
-          if (preferLiteMaterial(p)) continue;
+          if (preferLiteMaterial(p) && !p.schematic) continue;
           applyFinishToMaterial(mesh.material, p, {
             schematic: !!p.schematic,
             presentation,
@@ -1264,34 +1489,39 @@ export async function createViewer(host, atlas, handlers) {
         const part = mesh.userData.part;
         mesh.visible =
           !dentalModel &&
-          !state.hidden?.has(part.id) &&
-          (part.schematic ? state.schematic !== false : true) &&
-          (state.isolated
-            ? part.id === state.selected
-            : state.layers.has(part.group) ||
-              // The muscles of mastication stay on when the muscle layer is
-              // off, because they are the subject rather than a system.
-              (state.masticatory !== false && MASTICATORY.has(part.id)));
+          (intraoralTab
+            ? intraoralVisible(part, state)
+            : !state.hidden?.has(part.id) &&
+              (part.schematic ? state.schematic !== false : true) &&
+              (state.isolated
+                ? part.id === state.selected
+                : state.layers.has(part.group) ||
+                  (state.masticatory !== false && MASTICATORY.has(part.id))));
         const selected = part.id === state.selected;
-        mesh.material.color.set(
-          partColor(part, groups, { presentation, selected }),
-        );
-        mesh.material.emissive.set(
-          selected
-            ? presentation === "clinical"
-              ? "#3d3010"
-              : "#142349"
-            : part.schematic
-              ? groups[part.group].color
-              : "#000000",
-        );
-        mesh.material.emissiveIntensity = part.schematic ? 0.12 : selected ? 0.08 : 0;
-        // Every tissue group carries its own opacity, so bone can be faded
-        // to follow a nerve through it. The selected structure stays solid.
-        const fade = state.opacity?.get(part.group) ?? 1;
-        mesh.material.transparent = fade < 1 && !selected;
-        mesh.material.opacity = mesh.material.transparent ? fade : 1;
-        mesh.material.depthWrite = !mesh.material.transparent;
+        const oralAtlas =
+          intraoralTab && !dentalModel && isIntraoralEligible(part);
+        if (!oralAtlas) {
+          mesh.material.color.set(
+            partColor(part, groups, { presentation, selected }),
+          );
+          mesh.material.emissive.set(
+            materialEmissive(part, { presentation, selected }),
+          );
+          mesh.material.emissiveIntensity = materialEmissiveIntensity(part, {
+            presentation,
+            selected,
+          });
+        }
+        if (q === "smooth" && "transmission" in mesh.material) {
+          mesh.material.transmission = 0;
+          mesh.material.thickness = 0;
+        }
+        if (!oralAtlas) {
+          const fade = state.opacity?.get(part.group) ?? 1;
+          mesh.material.transparent = fade < 1 && !selected;
+          mesh.material.opacity = mesh.material.transparent ? fade : 1;
+          mesh.material.depthWrite = !mesh.material.transparent;
+        }
       }
       if (explosion !== previousExplosion) followExplosion = true;
       applyExplosion();
@@ -1304,8 +1534,11 @@ export async function createViewer(host, atlas, handlers) {
         if (shown === 0) view(currentDirection);
         else settleView = true;
       }
+      renderBudget = Math.max(renderBudget, 2);
+      render();
     },
     view,
+    viewIntraoral,
     // A zoom is only ever a zoom. It never touches the separation amount, at
     // any distance, in either direction; that belongs to the slider alone.
     zoom(factor) {

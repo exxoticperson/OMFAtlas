@@ -71,6 +71,56 @@ test("bilateral structures mirror across the midline and midline ones do not dup
   assert.ok(!byId.has("SCH-nasopalatine-nerve-r"));
 });
 
+test("foramen ovale sits lateral to the mandibular foramen and V3 reaches the foramen", () => {
+  for (const side of [-1, 1]) {
+    const ov = anchors.foramenOvale(side);
+    const mf = anchors.mandibularForamen(side);
+    assert.ok(
+      Math.abs(ov[0]) > Math.abs(mf[0]),
+      "foramen ovale should be lateral to the mandibular foramen",
+    );
+    assert.ok(ov[1] > mf[1], "foramen ovale should be superior to the mandibular foramen");
+    const v3 = byId.get(`SCH-v3${side < 0 ? "-r" : "-l"}`);
+    const nearMf = (point) =>
+      Math.hypot(point[0] - mf[0], point[1] - mf[1], point[2] - mf[2]) < 0.006;
+    const pos = v3.geometry.getAttribute("position").array;
+    let touches = false;
+    for (let i = 0; i < pos.length; i += 3) {
+      if (nearMf([pos[i], pos[i + 1], pos[i + 2]])) touches = true;
+    }
+    assert.ok(touches, "V3 trunk should reach the mandibular foramen");
+  }
+});
+
+test("maxillary nerve runs from rotundum through the pterygopalatine fossa", () => {
+  for (const [suffix, side] of [["-r", -1], ["-l", 1]]) {
+    const v2 = byId.get(`SCH-v2${suffix}`);
+    const rot = anchors.foramenRotundum(side);
+    const fossa = anchors.pterygopalatineFossa(side);
+    const center = v2.bounds[0].map((lo, i) => (lo + v2.bounds[1][i]) / 2);
+    assert.ok(
+      Math.hypot(center[0] - fossa[0], center[1] - fossa[1], center[2] - fossa[2]) < 0.012,
+      "V2 should pass through the pterygopalatine fossa",
+    );
+    assert.ok(
+      rot[1] >= fossa[1],
+      "foramen rotundum should lie at or above the fossa",
+    );
+  }
+});
+
+test("OMF schematic nerves include IAN, chorda tympani and hypoglossal", () => {
+  for (const id of [
+    "SCH-inferior-alveolar-nerve-r",
+    "SCH-lingual-nerve-l",
+    "SCH-chorda-tympani-r",
+    "SCH-hypoglossal-nerve-l",
+    "SCH-v1-r",
+  ]) {
+    assert.ok(byId.has(id), `missing ${id}`);
+  }
+});
+
 test("the inferior alveolar nerve follows this mandible, not an idealized one", () => {
   for (const [id, side] of [
     ["SCH-inferior-alveolar-nerve-r", -1],

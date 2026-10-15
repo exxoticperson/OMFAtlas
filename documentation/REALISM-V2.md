@@ -4,7 +4,8 @@
 
 - **Clinical surface** presentation: enables **skin** (4 meshes) and **eyes & ears** (36 meshes) from BodyParts3D, plus muscles and soft tissue, with tuned PBR (sheen/transmission on skin, cornea/sclera tints on ocular parts, ear cartilage as soft tissue).
 - **Teaching** presentation: original default layers (no skin/eyes/brain on first load).
-- Toggle **Teaching | Clinical** in the layers panel, or press **Full head** preset.
+- Toggle **Teaching | Clinical** in the layers panel, press **Full head** preset, or keyboard **`P`**.
+- Keyboard **`?`** opens the shortcut list; **`Alt`+click** a structure to solo its layer.
 
 ## Performance
 
@@ -18,5 +19,7 @@ This is still **educational mesh data**, not photogrammetry or patient scans. Bo
 
 ## References
 
-- BodyParts3D / CC BY 4.0 — base meshes
-- Material tuning informed by clinical atlas presentation (specimen + studio lighting), not copied assets from third-party apps
+- **BodyParts3D / CC BY 4.0** — same mesh lineage as [Astra Human Body Atlas](https://app.astra-ai.co/en-US/lab/human-body-3d) (credited in their UI).
+- **Atlas color discipline:** Sobotta / Netter-style OMF plates (ivory bone, dry muscle, muted artery/vein/nerve) and specimen photography — saturated “diagram neon” avoided in **Clinical surface**.
+- **Schematic OMF paths** (`schematic-anatomy.js`): wax-like tubes (matte nerve, satin artery, blue-grey vein), no emissive bloom in clinical mode — reads closer to a pro atlas than glowing CAD.
+- **Astra comparison:** They win on full-body scope and polish shell; we target **head/neck + OMF schematics** with richer PBR on skin/eyes and honest schematic shading on nerves/vessels the source scan omits.
