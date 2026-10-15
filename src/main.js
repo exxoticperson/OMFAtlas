@@ -140,6 +140,115 @@ try {
 } catch {}
 let atlas, viewer;
 
+const embedConfig = globalThis.__OMF_EMBED__ ?? null;
+const isEmbed = Boolean(embedConfig?.embed);
+/** @type {ReturnType<import("./embed-bridge.js").initEmbedBridge> | null} */
+let embedBridge = null;
+
+function embedSceneFromTab(tab) {
+  if (tab === "dental") return "dental";
+  if (tab === "study" || tab === "quiz") return tab;
+  return "head";
+}
+
+function buildSelectStructurePayload() {
+  const part = atlas?.parts.find((p) => p.id === state.selected);
+  const name = part ? displayName(part) : state.selected;
+  const fdi = part ? toothNumber(part.name) : state.fdi;
+  return {
+    partId: state.selected,
+    displayName: name,
+    scene: embedSceneFromTab(state.tab),
+    ...(fdi ? { fdi } : {}),
+    mode: state.mode,
+  };
+}
+
+function emitSelectStructure() {
+  embedBridge?.postSelectStructure(buildSelectStructurePayload());
+}
+
+function applyEmbedScene(scene) {
+  switch (scene) {
+    case "head":
+      setTab("anatomy");
+      break;
+    case "dental":
+      setTab("dental");
+      setMode("3d");
+      break;
+    case "development":
+      setTab("dental");
+      setMode("development");
+      break;
+    case "study":
+      setTab("study");
+      break;
+    case "quiz":
+      setTab("quiz");
+      break;
+    default:
+      break;
+  }
+}
+
+function embedSelectById(partId) {
+  if (!atlas) return;
+  const trimmed = String(partId).trim();
+  if (/^\d{2}$/.test(trimmed)) {
+    const fdi = Number(trimmed);
+    if (dentalProfile(fdi)) {
+      inspectTooth(fdi);
+      return;
+    }
+  }
+  const part = atlas.parts.find(
+    (p) => p.id === trimmed || p.conceptId === trimmed,
+  );
+  if (part) selectPart(part.id, { fromEmbed: true });
+}
+
+function applyEmbedShell() {
+  document.body.classList.add("embed-mode");
+  if (embedConfig?.uiMinimal) document.body.classList.add("embed-minimal");
+  const studio = document.querySelector(".studio");
+  if (studio) studio.classList.add("embed-studio");
+  const attribution = document.getElementById("embed-attribution");
+  if (attribution) attribution.hidden = false;
+  if (embedConfig?.modes?.length) {
+    document.querySelectorAll(".tab-bar [data-tab]").forEach((button) => {
+      button.hidden = !embedConfig.modes.includes(button.dataset.tab);
+    });
+  }
+}
+
+async function initEmbedIntegration() {
+  if (!isEmbed) return;
+  const { createParentOriginGuard, initEmbedBridge } = await import(
+    "./embed-bridge.js"
+  );
+  embedBridge = initEmbedBridge({
+    isAllowedParentOrigin: createParentOriginGuard(embedConfig.parentOrigin),
+    getAtlasOrigin: () => location.origin,
+    getPublicState: () => ({
+      scene: embedSceneFromTab(state.tab),
+      partId: state.selected,
+      theme: document.documentElement.dataset.theme,
+      explode: state.explode,
+      tab: state.tab,
+      mode: state.mode,
+    }),
+    onNavigate: (payload) => {
+      if (payload?.scene) applyEmbedScene(payload.scene);
+      const partId = payload?.partId ?? payload?.part;
+      if (partId) embedSelectById(partId);
+    },
+    onSelectStructure: embedSelectById,
+  });
+  if (embedConfig.scene) applyEmbedScene(embedConfig.scene);
+  if (embedConfig.part) embedSelectById(embedConfig.part);
+}
+
 // What the drawn tooth is built out of, and what the panel says about it. A
 // published tooth replaces both. When there is no published model for the
 // tooth a reader asked for, the panel has to come back to these rather than
@@ -257,6 +366,8 @@ document.querySelector("#app").innerHTML = `
   </div>
   <div id="part-hover" class="part-hover" hidden aria-hidden="true"></div>
   <dialog id="modal"><button id="close-modal" class="close" aria-label="Close dialog">×</button><div id="modal-content"></div></dialog>`;
+
+if (isEmbed) applyEmbedShell();
 
 // ---- Analytics consent ---------------------------------------------------
 //
@@ -455,6 +566,7 @@ function inspectTooth(fdi = state.fdi, { periodontium = false } = {}) {
       renderToothTissues();
     }),
   );
+  emitSelectStructure();
 }
 
 function setAge(age) {
@@ -494,7 +606,7 @@ function clearSelection() {
   if (wasDetail) requestAnimationFrame(()=>viewer?.view("oblique",state.arches));
 }
 
-function selectPart(id) {
+function selectPart(id, options = {}) {
   if (!id || (state.selected === id && !state.arches && !state.toothDetail)) {clearSelection();return;}
   const part = atlas.parts.find((p) => p.id === id);
   if (!part) return;
@@ -527,6 +639,7 @@ function selectPart(id) {
   renderTeaching();
   showDetails();
   if (state.isolated) viewer?.view("oblique", true);
+  if (!options.fromEmbed) emitSelectStructure();
 }
 
 function renderBrowser() {
@@ -1650,7 +1763,7 @@ document.querySelector("#consent-accept").onclick = () => setConsent("granted");
 document.querySelector("#consent-decline").onclick = () => setConsent("denied");
 document.querySelector("#privacy").onclick = () => privacy();
 // A previous grant was already restored in index.html, before the tag loaded.
-if (readConsent() === null) showConsent(true);
+if (!isEmbed && readConsent() === null) showConsent(true);
 
 document.querySelector("#close-modal").onclick = () =>
   document.querySelector("#modal").close();
@@ -1674,9 +1787,10 @@ try {
   if (!facialResponse.ok) throw new Error("The facial muscle index could not be loaded.");
   const facial = await facialResponse.json();
   atlas.parts.push(...facial.parts);
+  if (isEmbed) await initEmbedIntegration();
   renderBrowser();
   renderInspector();
-  showDetails(wideWindow.matches);
+  showDetails(isEmbed && embedConfig?.uiMinimal ? false : wideWindow.matches);
   const explodeInput = document.querySelector("#explode");
   explodeInput.oninput = () => setExplosion(Number(explodeInput.value));
   document.querySelector("#reassemble-dock").onclick = () => {
@@ -1687,6 +1801,7 @@ try {
     onSelect: selectPart,
     onReady: () => {
       document.querySelector("#load-status").hidden = true;
+      embedBridge?.postReady();
     },
     onProgress: (percent) => {
       const bar = document.querySelector("#load-bar");

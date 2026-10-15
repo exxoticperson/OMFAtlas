@@ -7769,3 +7769,65 @@ body.source-models .studio .caption-stack {
     flex: 1;
   }
 }
+
+/* fakarny embed shell — see documentation/EMBED.md */
+html.embed-document,
+html.embed-document body {
+  overflow: hidden;
+  height: 100%;
+}
+
+.embed-attribution-line {
+  position: fixed;
+  z-index: 2;
+  left: 12px;
+  bottom: 6px;
+  margin: 0;
+  max-width: min(520px, 70vw);
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted, #5c6670);
+  pointer-events: none;
+}
+
+body.embed-mode .studio .studio-footer,
+body.embed-mode #consent {
+  display: none !important;
+}
+
+body.embed-minimal .studio .identity .breadcrumb,
+body.embed-minimal .studio .identity .eyebrow,
+body.embed-minimal .studio .identity #resolution-status,
+body.embed-minimal .studio .identity .brand-word,
+body.embed-minimal .studio .sidebar-bottom #coverage,
+body.embed-minimal .studio .caption-stack .drag-hint,
+body.embed-minimal .studio .dock-note {
+  display: none !important;
+}
+
+body.embed-minimal .studio .identity {
+  top: 8px;
+  left: 8px;
+  max-width: 40vw;
+}
+
+body.embed-minimal .studio .identity h1 {
+  font-size: 1.05rem;
+}
+
+body.embed-minimal .studio .tab-bar {
+  top: 8px;
+  right: 8px;
+}
+
+body.embed-minimal .studio .top-actions {
+  top: 8px;
+}
+
+body.embed-minimal .studio .inspector {
+  max-height: min(42vh, 320px);
+}
+
+body.embed-minimal.embed-mode .studio .stage-bottom {
+  padding-bottom: 22px;
+}
