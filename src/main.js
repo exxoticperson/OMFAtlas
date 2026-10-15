@@ -1,5 +1,7 @@
 import "./style.css";
+import "./design-v2.css";
 import { initShellNav } from "./shell-nav.js";
+import { PRESENTATIONS } from "./realism-v2.js";
 import { createViewer } from "./viewer.js";
 import {
   MASTICATORY,
@@ -96,9 +98,20 @@ const DEFAULT_LAYERS = [
   "soft",
   "airway",
 ];
+const PRESENTATION_KEY = "omf-presentation-v2";
+const readPresentation = () => {
+  try {
+    const v = localStorage.getItem(PRESENTATION_KEY);
+    if (v === "teaching" || v === "clinical") return v;
+  } catch {}
+  return "clinical";
+};
 const state = {
   selected: "FJ3289",
-  layers: new Set(DEFAULT_LAYERS),
+  presentation: readPresentation(),
+  layers: new Set(
+    PRESENTATIONS[readPresentation()]?.layers ?? DEFAULT_LAYERS,
+  ),
   age: "adult",
   arches: false,
   toothDetail: false,
@@ -371,6 +384,10 @@ document.querySelector("#app").innerHTML = `
 
 if (isEmbed) applyEmbedShell();
 shellNav = initShellNav({ compact: true });
+document.body.classList.toggle(
+  "presentation-clinical",
+  state.presentation === "clinical",
+);
 
 // ---- Analytics consent ---------------------------------------------------
 //
@@ -646,6 +663,21 @@ function selectPart(id, options = {}) {
   if (!options.fromEmbed) emitSelectStructure();
 }
 
+function setPresentation(mode) {
+  if (!PRESENTATIONS[mode]) return;
+  state.presentation = mode;
+  document.body.classList.toggle("presentation-clinical", mode === "clinical");
+  try {
+    localStorage.setItem(PRESENTATION_KEY, mode);
+  } catch {}
+  state.layers = new Set(PRESENTATIONS[mode].layers);
+  if (mode === "clinical") state.schematic = true;
+  if (atlas) {
+    renderBrowser();
+    updateScene();
+  }
+}
+
 function renderBrowser() {
   if (state.arches || state.age !== "adult") {
     const primary = state.age === "child";
@@ -692,7 +724,7 @@ function renderBrowser() {
     return `${heading}<button data-part="${p.id}" class="structure ${p.id === state.selected ? "selected" : ""} ${isSchematic(p) ? "is-schematic" : ""}"><span class="tiny-dot" style="background:${groups[p.group].color}"></span><span>${escape(displayName(p))}</span>${isSchematic(p) ? SCHEMATIC_BADGE : ""}${toothNumber(p.name) ? `<small>${toothNumber(p.name)}</small>` : ""}${icon("arrow")}</button>`;
   }).join("");
   const browser = document.querySelector("#browser");
-  browser.innerHTML = `<div class="section-label"><h3>${query ? "Search results" : "Systems"}</h3><span>${matching.length}</span></div>${!query ? `<div class="layer-presets"><button data-preset="all">All</button><button data-preset="skeleton">Skeleton</button><button data-preset="vascular">Vessels</button><button data-preset="neuro">Nerves</button><button data-preset="none">Hide all</button></div><label class="layer schematic-switch"><span class="layer-dot schematic-dot"></span><span>Schematic structures</span><span class="layer-count">${atlas.parts.filter(isSchematic).length}</span><input type="checkbox" data-schematic ${state.schematic ? "checked" : ""} aria-label="Show schematic structures"></label><p class="fine-print schematic-note">Nerves, vessels, glands, the sinus and the joint disc that the source scan omits, drawn onto this skull.</p><label class="layer schematic-switch"><span class="layer-dot" style="background:${groups.muscles.color}"></span><span>Muscles of mastication</span><span class="layer-count">${atlas.parts.filter((p) => MASTICATORY.has(p.id)).length}</span><input type="checkbox" data-masticatory ${state.masticatory ? "checked" : ""} aria-label="Show the muscles of mastication"></label><p class="fine-print schematic-note">Masseter, temporalis, the pterygoids and buccinator stay on with the muscle layer off, because they are what this atlas is about.</p>` : ""}
+  browser.innerHTML = `<div class="section-label"><h3>${query ? "Search results" : "Systems"}</h3><span>${matching.length}</span></div>${!query ? `<div class="presentation-switch" role="group" aria-label="Surface presentation"><button type="button" data-presentation="teaching" aria-pressed="${state.presentation === "teaching"}">${PRESENTATIONS.teaching.label}</button><button type="button" data-presentation="clinical" aria-pressed="${state.presentation === "clinical"}">${PRESENTATIONS.clinical.label}</button></div><div class="layer-presets"><button data-preset="realism">Full head</button><button data-preset="all">All</button><button data-preset="skeleton">Skeleton</button><button data-preset="vascular">Vessels</button><button data-preset="neuro">Nerves</button><button data-preset="none">Hide all</button></div><label class="layer schematic-switch"><span class="layer-dot schematic-dot"></span><span>Schematic structures</span><span class="layer-count">${atlas.parts.filter(isSchematic).length}</span><input type="checkbox" data-schematic ${state.schematic ? "checked" : ""} aria-label="Show schematic structures"></label><p class="fine-print schematic-note">Nerves, vessels, glands, the sinus and the joint disc that the source scan omits, drawn onto this skull.</p><label class="layer schematic-switch"><span class="layer-dot" style="background:${groups.muscles.color}"></span><span>Muscles of mastication</span><span class="layer-count">${atlas.parts.filter((p) => MASTICATORY.has(p.id)).length}</span><input type="checkbox" data-masticatory ${state.masticatory ? "checked" : ""} aria-label="Show the muscles of mastication"></label><p class="fine-print schematic-note">Masseter, temporalis, the pterygoids and buccinator stay on with the muscle layer off, because they are what this atlas is about.</p>` : ""}
     ${
       query
         ? ""
@@ -717,9 +749,17 @@ function renderBrowser() {
     browser.prepend(browser.querySelector("#structure-library"));
     browser.prepend(browser.querySelector(".inventory-heading"));
   }
+  browser.querySelectorAll("[data-presentation]").forEach(
+    (b) =>
+      (b.onclick = () => setPresentation(b.dataset.presentation)),
+  );
   browser.querySelectorAll("[data-preset]").forEach(
     (b) =>
       (b.onclick = () => {
+        if (b.dataset.preset === "realism") {
+          setPresentation("clinical");
+          return;
+        }
         state.layers = new Set(
           b.dataset.preset === "all"
             ? Object.keys(groups)

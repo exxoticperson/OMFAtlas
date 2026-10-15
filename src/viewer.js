@@ -2,6 +2,12 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { MASTICATORY, groups, toothNumber } from "./content.js";
+import {
+  applyFinishToMaterial,
+  partColor,
+  surfaceKind,
+  SURFACE_FINISH_V2,
+} from "./realism-v2.js";
 import { createExplosionLayout, explodedOffset, explosionControls, explosionStage, smoothstep } from "./explosion-layout.js";
 import { createSchematicParts, deriveLandmarks } from "./schematic-anatomy.js";
 import {
@@ -57,7 +63,7 @@ export async function createViewer(host, atlas, handlers) {
   // ACES keeps the pale bone and enamel from clipping under the key light and
   // rolls the highlights off the way a photograph does.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.07;
+  renderer.toneMappingExposure = 1.1;
   renderer.localClippingEnabled = true;
   host.append(renderer.domElement);
   renderer.domElement.setAttribute(
@@ -68,7 +74,7 @@ export async function createViewer(host, atlas, handlers) {
   // Damped orbit, as in the reference: a drag keeps a little momentum and
   // settles, which reads as weight. The frame loop below drives the damping.
   controls.enableDamping = true;
-  controls.dampingFactor = 0.085;
+  controls.dampingFactor = 0.092;
   controls.zoomToCursor = true;
   controls.minDistance = 0.008;
   controls.maxDistance = 1.2;
@@ -101,31 +107,8 @@ export async function createViewer(host, atlas, handlers) {
   // diffuse; enamel is hard with a thin glaze; soft tissue is damp, a low
   // broad clearcoat with a velvet sheen at grazing angles; vessels and nerves
   // are small, tight and glossy; the eye is a wet lens. Nothing is metallic.
-  const SURFACE_FINISH = {
-    bone: { roughness: 0.62, clearcoat: 0.06, clearcoatRoughness: 0.55, envMapIntensity: 0.8 },
-    enamel: { roughness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.16, envMapIntensity: 1.1 },
-    tissue: {
-      roughness: 0.52,
-      clearcoat: 0.28,
-      clearcoatRoughness: 0.4,
-      sheen: 0.45,
-      sheenRoughness: 0.55,
-      sheenColor: new THREE.Color(0xffd5cc),
-      envMapIntensity: 0.85,
-    },
-    vessel: { roughness: 0.36, clearcoat: 0.55, clearcoatRoughness: 0.22, envMapIntensity: 1 },
-    eye: { roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.2 },
-  };
-  const surfaceKind = (group) =>
-    group === "bones" || group === "neck"
-      ? "bone"
-      : group === "teeth"
-        ? "enamel"
-        : group === "arteries" || group === "veins" || group === "nerves"
-          ? "vessel"
-          : group === "eyes"
-            ? "eye"
-            : "tissue";
+  const finishFor = (part) =>
+    SURFACE_FINISH_V2[surfaceKind(part)] ?? SURFACE_FINISH_V2.tissue;
   const BASE_BUFFER = "/models/omf.bin";
   async function loadBuffer(url, report) {
     const response = await fetch(url);
@@ -187,14 +170,13 @@ export async function createViewer(host, atlas, handlers) {
     return geometry;
   }
   const meshes = [];
+  let cachedPresentation = null;
   function addMesh(part, geometry) {
-    const finish = SURFACE_FINISH[surfaceKind(part.group)];
+    const finish = finishFor(part);
     const material = new THREE.MeshPhysicalMaterial({
       color: groups[part.group].color,
       metalness: 0,
       side: THREE.DoubleSide,
-      // Schematic structures get a flatter, slightly self-lit surface so they
-      // never read as scanned tissue next to the source meshes.
       ...(part.schematic
         ? {
             roughness: 0.82,
@@ -204,6 +186,12 @@ export async function createViewer(host, atlas, handlers) {
           }
         : finish),
     });
+    if (!part.schematic) {
+      applyFinishToMaterial(material, part, {
+        schematic: false,
+        presentation: "clinical",
+      });
+    }
     const mesh = new THREE.Mesh(geometry, material);
     mesh.userData.part = part;
     scene.add(mesh);
@@ -665,7 +653,7 @@ export async function createViewer(host, atlas, handlers) {
     const delta = Math.min((now - lastFrame) / 1000 || 0.016, 0.05);
     lastFrame = now;
     if (shown !== explosion) {
-      shown = THREE.MathUtils.damp(shown, explosion, 8, delta);
+      shown = THREE.MathUtils.damp(shown, explosion, 5.5, delta);
       if (Math.abs(shown - explosion) < 0.05) shown = explosion;
       applyExplosion();
       if (settleView && shown === 0) {
@@ -1240,6 +1228,17 @@ export async function createViewer(host, atlas, handlers) {
         );
       }
       if (!dentalModel?.userData.published) renderer.clippingPlanes = [];
+      const presentation = state.presentation || "clinical";
+      if (cachedPresentation !== presentation) {
+        cachedPresentation = presentation;
+        for (const mesh of meshes) {
+          const p = mesh.userData.part;
+          applyFinishToMaterial(mesh.material, p, {
+            schematic: !!p.schematic,
+            presentation,
+          });
+        }
+      }
       for (const mesh of meshes) {
         const part = mesh.userData.part;
         mesh.visible =
@@ -1254,9 +1253,18 @@ export async function createViewer(host, atlas, handlers) {
               (state.masticatory !== false && MASTICATORY.has(part.id)));
         const selected = part.id === state.selected;
         mesh.material.color.set(
-          selected ? "#5b86ee" : groups[part.group].color,
+          partColor(part, groups, { presentation, selected }),
         );
-        mesh.material.emissive.set(selected ? "#142349" : part.schematic ? groups[part.group].color : "#000000");
+        mesh.material.emissive.set(
+          selected
+            ? presentation === "clinical"
+              ? "#3d3010"
+              : "#142349"
+            : part.schematic
+              ? groups[part.group].color
+              : "#000000",
+        );
+        mesh.material.emissiveIntensity = part.schematic ? 0.12 : selected ? 0.08 : 0;
         // Every tissue group carries its own opacity, so bone can be faded
         // to follow a nerve through it. The selected structure stays solid.
         const fade = state.opacity?.get(part.group) ?? 1;

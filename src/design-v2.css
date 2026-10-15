@@ -1,0 +1,108 @@
+/* fakarny v2 — premium clinical studio (loads after base + refinement layers) */
+
+:root,
+:root[data-theme="light"] {
+  --stage: #ebe8e3;
+  --glass: #faf9f7;
+  --surface-veil: #faf9f7f0;
+  --ink: #141816;
+  --ink-soft: #3a403d;
+  --muted: #6b736e;
+  --line: #1a221c12;
+  --line-soft: #1a221c0a;
+  --accent: #a67c52;
+  --accent-soft: #a67c5228;
+  --select: #b8923a;
+  --shadow: 0 2px 4px #1a18140a, 0 12px 40px #1a181412;
+  --teal: var(--accent);
+  --navy: #2a2f2c;
+}
+
+:root[data-theme="dark"] {
+  --stage: #0c0e0d;
+  --glass: #161918;
+  --surface-veil: #161918ee;
+  --ink: #eceae6;
+  --ink-soft: #b8bcb8;
+  --muted: #8a918c;
+  --accent: #c9a06a;
+  --accent-soft: #c9a06a33;
+  --select: #e0b84a;
+  --shadow: 0 4px 24px #00000066;
+  --teal: var(--accent);
+}
+
+body.presentation-clinical .studio #viewer {
+  background: radial-gradient(120% 90% at 50% 38%, #ffffff 0%, var(--stage) 72%);
+}
+
+:root[data-theme="dark"].presentation-clinical .studio #viewer {
+  background: radial-gradient(110% 85% at 50% 40%, #1a1f1c 0%, var(--stage) 78%);
+}
+
+.studio .layer-presets button[data-preset="realism"] {
+  font-weight: 650;
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+body.presentation-clinical .studio .layer-presets button[data-preset="realism"] {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+}
+
+.studio .nav-button.active {
+  background: var(--ink);
+  color: #fff;
+  border-color: transparent;
+}
+
+:root[data-theme="dark"] .studio .nav-button.active {
+  background: #eceae6;
+  color: #121412;
+}
+
+.studio .stage-bottom {
+  border-radius: 16px 16px 0 0;
+  box-shadow: var(--shadow);
+}
+
+.studio .explode-control input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.studio .panel,
+.studio .tab-bar,
+.studio .view-controls {
+  border-radius: var(--panel-radius, 14px);
+  box-shadow: var(--shadow);
+}
+
+.presentation-switch {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  border: 1px solid var(--line);
+}
+
+.presentation-switch button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.presentation-switch button[aria-pressed="true"] {
+  background: var(--glass);
+  color: var(--ink);
+  box-shadow: 0 1px 3px #00000014;
+}
