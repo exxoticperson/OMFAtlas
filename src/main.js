@@ -48,6 +48,9 @@ import {
   UNNAMED_CUTS,
 } from "./dental-models.js";
 
+/** Set in init after #app markup exists. */
+let shellNav;
+
 const touchLayout = () => matchMedia("(max-width: 860px)").matches;
 const groupOpacity = (group) => state.opacity.get(group) ?? 1;
 const icon = (name) => {
@@ -530,7 +533,6 @@ function updateScene() {
         : "Mixed dentition · 24-tooth example · Eruption and tooth count vary";
 }
 
-let shellNav;
 function showDetails(open = true) {
   if (!shellNav) return;
   if (open) shellNav.openDetails();
