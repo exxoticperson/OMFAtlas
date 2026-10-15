@@ -8,6 +8,7 @@ import {
   surfaceKind,
   SURFACE_FINISH_V2,
 } from "./realism-v2.js";
+import { performanceTier, pixelRatioCap, preferLiteMaterial } from "./perf.js";
 import { createExplosionLayout, explodedOffset, explosionControls, explosionStage, smoothstep } from "./explosion-layout.js";
 import { createSchematicParts, deriveLandmarks } from "./schematic-anatomy.js";
 import {
@@ -52,11 +53,16 @@ export async function createViewer(host, atlas, handlers) {
   // budget so a 4K window does not quadruple the fill cost for a head that is
   // a few hundred meshes. Phones and short windows get a lower ceiling, as in
   // the reference.
-  const MAX_PIXELS = 9e6;
+  const PERF_TIER = performanceTier();
+  const MAX_PIXELS = PERF_TIER === "low" ? 6e6 : PERF_TIER === "medium" ? 7.5e6 : 9e6;
   const pixelRatioFor = (width, height) => {
     const compact = innerWidth < 768 || innerHeight < 600;
+    const cap = pixelRatioCap(PERF_TIER);
     const budget = Math.sqrt(MAX_PIXELS / Math.max(1, width * height));
-    return Math.max(1, Math.min(devicePixelRatio || 1, compact ? 1.75 : 2.5, budget));
+    return Math.max(
+      1,
+      Math.min(devicePixelRatio || 1, compact ? Math.min(1.5, cap) : cap, budget),
+    );
   };
   renderer.setPixelRatio(pixelRatioFor(host.clientWidth, host.clientHeight));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -173,7 +179,9 @@ export async function createViewer(host, atlas, handlers) {
   let cachedPresentation = null;
   function addMesh(part, geometry) {
     const finish = finishFor(part);
-    const material = new THREE.MeshPhysicalMaterial({
+    const lite = preferLiteMaterial(part);
+    const MaterialCtor = lite ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
+    const material = new MaterialCtor({
       color: groups[part.group].color,
       metalness: 0,
       side: THREE.DoubleSide,
@@ -186,11 +194,14 @@ export async function createViewer(host, atlas, handlers) {
           }
         : finish),
     });
-    if (!part.schematic) {
+    if (!part.schematic && !lite) {
       applyFinishToMaterial(material, part, {
         schematic: false,
         presentation: "clinical",
       });
+    } else if (!part.schematic && lite) {
+      material.roughness = finish.roughness ?? 0.55;
+      material.envMapIntensity = (finish.envMapIntensity ?? 0.8) * 0.85;
     }
     const mesh = new THREE.Mesh(geometry, material);
     mesh.userData.part = part;
@@ -647,21 +658,28 @@ export async function createViewer(host, atlas, handlers) {
   // The frame loop. It eases the explosion toward its target, at the same rate
   // as the reference (a damped approach, not a fixed-length tween, so a
   // reversal mid-flight turns round smoothly), and steps the orbit damping.
-  let frame = 0, lastFrame = 0;
+  let frame = 0,
+    lastFrame = 0,
+    renderBudget = 2;
   function tick(now) {
     frame = requestAnimationFrame(tick);
     const delta = Math.min((now - lastFrame) / 1000 || 0.016, 0.05);
     lastFrame = now;
-    if (shown !== explosion) {
+    if (Math.abs(shown - explosion) > 0.02) {
       shown = THREE.MathUtils.damp(shown, explosion, 5.5, delta);
       if (Math.abs(shown - explosion) < 0.05) shown = explosion;
       applyExplosion();
+      renderBudget = 3;
       if (settleView && shown === 0) {
         settleView = false;
         view(currentDirection);
       }
     }
     controls.update();
+    if (renderBudget > 0) {
+      render();
+      renderBudget--;
+    }
   }
   const viewAxis = new THREE.Vector3();
   const axisReport = { left: null, superior: null, anterior: null };
@@ -890,7 +908,9 @@ export async function createViewer(host, atlas, handlers) {
     else render();
   });
   resize.observe(host);
-  controls.addEventListener("change", render);
+  controls.addEventListener("change", () => {
+    renderBudget = Math.max(renderBudget, PERF_TIER === "low" ? 8 : 14);
+  });
   // A tap is a single pointer that went down and came up without travelling
   // and without a second pointer joining it. Tracking only one pointer let the
   // end of a pinch count as a tap and select whatever sat under the finger.
@@ -1233,6 +1253,7 @@ export async function createViewer(host, atlas, handlers) {
         cachedPresentation = presentation;
         for (const mesh of meshes) {
           const p = mesh.userData.part;
+          if (preferLiteMaterial(p)) continue;
           applyFinishToMaterial(mesh.material, p, {
             schematic: !!p.schematic,
             presentation,

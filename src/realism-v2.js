@@ -21,6 +21,7 @@ export const PRESENTATIONS = {
   },
   clinical: {
     label: "Clinical surface",
+    // Muscles off by default — 175 meshes; toggle in Layers when needed.
     layers: [
       "skin",
       "eyes",
@@ -28,13 +29,9 @@ export const PRESENTATIONS = {
       "teeth",
       "gingiva",
       "neck",
-      "muscles",
       "soft",
       "airway",
       "glands",
-      "arteries",
-      "veins",
-      "nerves",
     ],
   },
 };
@@ -163,8 +160,8 @@ export function applyFinishToMaterial(material, part, { schematic = false, prese
   const finish = SURFACE_FINISH_V2[kind] ?? SURFACE_FINISH_V2.tissue;
   if (schematic && presentation === "clinical") {
     material.roughness = 0.78;
-    material.clearcoat = 0.08;
-    material.transmission = 0;
+    if ("clearcoat" in material) material.clearcoat = 0.08;
+    if ("transmission" in material) material.transmission = 0;
     material.emissiveIntensity = 0.06;
     material.envMapIntensity = 0.5;
     return;
@@ -176,13 +173,19 @@ export function applyFinishToMaterial(material, part, { schematic = false, prese
     return;
   }
   material.roughness = finish.roughness;
-  material.clearcoat = finish.clearcoat ?? 0;
-  material.clearcoatRoughness = finish.clearcoatRoughness ?? 0.5;
-  material.sheen = finish.sheen ?? 0;
-  material.sheenRoughness = finish.sheenRoughness ?? 1;
-  if (finish.sheenColor) material.sheenColor.set(finish.sheenColor);
-  material.transmission = finish.transmission ?? 0;
-  material.thickness = finish.thickness ?? 0;
+  if ("clearcoat" in material) {
+    material.clearcoat = finish.clearcoat ?? 0;
+    material.clearcoatRoughness = finish.clearcoatRoughness ?? 0.5;
+  }
+  if ("sheen" in material) {
+    material.sheen = finish.sheen ?? 0;
+    material.sheenRoughness = finish.sheenRoughness ?? 1;
+    if (finish.sheenColor) material.sheenColor.set(finish.sheenColor);
+  }
+  if ("transmission" in material) {
+    material.transmission = finish.transmission ?? 0;
+    material.thickness = finish.thickness ?? 0;
+  }
   material.envMapIntensity = finish.envMapIntensity ?? 1;
   material.emissiveIntensity = 0;
 }
