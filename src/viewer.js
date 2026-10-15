@@ -57,7 +57,7 @@ export async function createViewer(host, atlas, handlers) {
   // ACES keeps the pale bone and enamel from clipping under the key light and
   // rolls the highlights off the way a photograph does.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.07;
   renderer.localClippingEnabled = true;
   host.append(renderer.domElement);
   renderer.domElement.setAttribute(

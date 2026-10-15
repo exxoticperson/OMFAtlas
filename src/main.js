@@ -1,4 +1,5 @@
 import "./style.css";
+import { initShellNav } from "./shell-nav.js";
 import { createViewer } from "./viewer.js";
 import {
   MASTICATORY,
@@ -297,7 +298,7 @@ document.querySelector("#app").innerHTML = `
   <div class="top-actions">
     <button class="icon-button" id="theme" title="Switch between light and dark" aria-label="Switch between light and dark"></button>
     <button class="icon-button" id="reset" title="Reset view and layers" aria-label="Reset view and layers">${icon("reset")}</button>
-    <button id="toggle-details" aria-expanded="false">Details</button>
+    <button id="toggle-details" aria-expanded="false">Structure</button>
   </div>
 
   <aside class="sidebar panel">
@@ -366,6 +367,7 @@ document.querySelector("#app").innerHTML = `
   <dialog id="modal"><button id="close-modal" class="close" aria-label="Close dialog">×</button><div id="modal-content"></div></dialog>`;
 
 if (isEmbed) applyEmbedShell();
+shellNav = initShellNav({ compact: true });
 
 // ---- Analytics consent ---------------------------------------------------
 //
@@ -528,15 +530,12 @@ function updateScene() {
         : "Mixed dentition · 24-tooth example · Eruption and tooth count vary";
 }
 
+let shellNav;
 function showDetails(open = true) {
-  document.body.classList.toggle("details-open", open);
-  document
-    .querySelector("#toggle-details")
-    .setAttribute("aria-expanded", String(open));
-  document.querySelector("#inspector").inert = !open;
+  if (!shellNav) return;
+  if (open) shellNav.openDetails();
+  else shellNav.closeDetails();
 }
-const wideWindow = matchMedia("(min-width: 861px)");
-wideWindow.addEventListener("change", (event) => showDetails(event.matches));
 
 function inspectTooth(fdi = state.fdi, { periodontium = false } = {}) {
   state.explode = 0;
@@ -808,8 +807,11 @@ function setExplosion(progress) {
     document.querySelector("#browser").scrollTop = 0;
     document.querySelector("#mobile-library span").textContent = state.explode >= INVENTORY_PERCENT ? "Parts inventory" : "Layers";
     if (touchLayout()) {
-      document.querySelector(".sidebar").classList.toggle("expanded", state.explode >= INVENTORY_PERCENT);
-      document.querySelector("#mobile-library").setAttribute("aria-expanded", String(state.explode >= INVENTORY_PERCENT));
+      const inventory = state.explode >= INVENTORY_PERCENT;
+      document.querySelector(".sidebar").classList.toggle("expanded", inventory);
+      document.querySelector("#mobile-library").setAttribute("aria-expanded", String(inventory));
+      if (inventory) shellNav?.openLayers();
+      else if (!document.body.classList.contains("details-open")) shellNav?.closeLayers();
     }
   }
 }
@@ -1604,8 +1606,10 @@ document.querySelectorAll("[data-tab]").forEach(
 document.querySelector("#age").onchange = (e) => {
   if (atlas) setAge(e.target.value);
 };
-document.querySelector("#toggle-details").onclick = () =>
-  showDetails(!document.body.classList.contains("details-open"));
+document.querySelector("#toggle-details").onclick = () => {
+  if (document.body.classList.contains("details-open")) showDetails(false);
+  else showDetails(true);
+};
 document.querySelector("#close-inspector").onclick = () => showDetails(false);
 document.querySelector("#exit-tooth").onclick = exitTooth;
 document.querySelector("#cutaway").onchange = (e) => {
@@ -1687,17 +1691,23 @@ document
   .querySelectorAll("[data-mode]")
   .forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
 document.querySelector("#mobile-library").onclick = (e) => {
-  const open = document.querySelector(".sidebar").classList.toggle("expanded");
-  e.currentTarget.setAttribute("aria-expanded", String(open));
+  const sidebar = document.querySelector(".sidebar");
+  const inventory = state.explode >= INVENTORY_PERCENT && touchLayout();
+  if (inventory) {
+    const open = sidebar.classList.toggle("expanded");
+    e.currentTarget.setAttribute("aria-expanded", String(open));
+    if (open) shellNav?.openLayers();
+    else shellNav?.closeLayers();
+    return;
+  }
+  shellNav?.toggleLayers();
 };
 /* The touch dock is one row deep, so the selection and separation controls
    take turns in it. On wide windows both are on screen and the switch is not
    rendered at all. */
 const collapseLibrary = () => {
-  document.querySelector(".sidebar").classList.remove("expanded");
-  document
-    .querySelector("#mobile-library")
-    .setAttribute("aria-expanded", "false");
+  document.querySelector(".sidebar")?.classList.remove("expanded");
+  shellNav?.closeLayers();
 };
 const showSeparation = (on) => {
   document.body.classList.toggle("separating", on);
@@ -1793,7 +1803,7 @@ try {
   if (isEmbed) await initEmbedIntegration();
   renderBrowser();
   renderInspector();
-  showDetails(isEmbed && embedConfig?.uiMinimal ? false : wideWindow.matches);
+  showDetails(false);
   const explodeInput = document.querySelector("#explode");
   explodeInput.oninput = () => setExplosion(Number(explodeInput.value));
   document.querySelector("#reassemble-dock").onclick = () => {
