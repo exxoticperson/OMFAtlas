@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f1f2f2" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="OMF Atlas embed — interactive oral and maxillofacial anatomy for fakarny lessons."
+    />
+    <title>OMF Atlas embed</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="robots" content="noindex, nofollow" />
+  </head>
+  <body>
+    <script>
+      (() => {
+        if (document.documentElement.dataset.theme) return;
+        let theme;
+        try {
+          theme = localStorage.getItem("omf-theme");
+        } catch {}
+        const fromQuery = new URLSearchParams(location.search).get("theme");
+        if (fromQuery === "dark" || fromQuery === "light") theme = fromQuery;
+        if (theme !== "dark" && theme !== "light")
+          theme = matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <div id="app"></div>
+    <p class="embed-attribution-line" hidden id="embed-attribution">
+      Anatomy data: BodyParts3D (CC BY 4.0) and project schematics — see Credits in full atlas.
+    </p>
+    <script type="module" src="/src/embed.js"></script>
+  </body>
+</html>
