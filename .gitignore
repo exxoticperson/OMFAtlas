@@ -6,3 +6,5 @@ dist/
 # Source archives for scripts/import-dental-models.mjs. Hundreds of megabytes
 # of published CAD, fetched from the DOIs recorded in the import manifest.
 documentation/refs/
+.vercel
+.env*
