@@ -1176,7 +1176,7 @@ function tubeGeometry(waypoints, radius) {
   // Segment count follows the path length so a long vessel does not turn into
   // a faceted stick and a short twig does not carry pointless triangles.
   const segments = Math.min(96, Math.max(24, Math.round(curve.getLength() / 0.0015)));
-  return new THREE.TubeGeometry(curve, segments, radius, 14, false);
+  return new THREE.TubeGeometry(curve, segments, radius, 20, false);
 }
 
 function volumeGeometry({ center, radii }) {

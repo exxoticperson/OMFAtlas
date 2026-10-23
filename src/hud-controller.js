@@ -209,7 +209,7 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
     resultsList.innerHTML = items
       .map(
         (item, index) => `
-      <div class="spotlight-result-item ${index === 0 ? "selected" : ""}" data-item-id="${item.id}" data-item-fdi="${item.fdi || ""}">
+      <div class="spotlight-result-item ${index === 0 ? "selected" : ""}" data-item-id="${item.id}" data-item-fdi="${item.fdi || ""}" data-protocol-id="${item.action?.protocol?.id || ""}">
         <div class="spotlight-result-main">
           <div class="spotlight-result-title">${item.title}</div>
           <div class="spotlight-result-sub">${item.subtitle}</div>
@@ -222,10 +222,17 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
 
     resultsList.querySelectorAll(".spotlight-result-item").forEach((el) => {
       el.addEventListener("click", () => {
+        const protoId = el.dataset.protocolId;
         const partId = el.dataset.itemId;
         const fdi = el.dataset.itemFdi;
         closeSpotlight();
-        if (partId) {
+        if (protoId) {
+          const proto = CLINICAL_LA_PROTOCOLS[protoId];
+          if (proto) {
+            updateInspectorForProtocol(proto);
+            if (viewerApi?.showLASimulator) viewerApi.showLASimulator(proto.id);
+          }
+        } else if (partId) {
           onSelectPart(partId);
           updateInspector(partId, fdi);
         }
@@ -344,6 +351,20 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
   const inspBtnTrace = document.querySelector("#insp-btn-trace");
 
   let activePartId = null;
+
+  function updateInspectorForProtocol(proto) {
+    inspFdi.textContent = "LA BLOCK";
+    inspTitle.textContent = proto.name;
+    inspSub.textContent = proto.subtitle;
+    inspCanals.textContent = `Target: ${proto.targetLandmark}`;
+    inspNerve.textContent = `Anesthetized: ${proto.anesthetizedNerves.join(", ")} (${proto.anesthetizedTeeth})`;
+    inspSafetySection.style.display = "block";
+    inspSafety.textContent = `Needle: ${proto.needleGauge} · ${proto.needleAngle}. Depth: ${proto.penetrationDepth}. ${proto.clinicalPearls}`;
+    inspBtnTrace.style.display = "block";
+    inspBtnTrace.textContent = "Pulse Anesthetic";
+    inspBtnSolo.textContent = "Clear Needle";
+    inspectorCard.classList.add("visible");
+  }
 
   function updateInspector(partId, fdi = null) {
     if (!partId) {

@@ -373,16 +373,12 @@ export function applyFinishToMaterial(material, part, { schematic = false, prese
     (schematic ? SURFACE_FINISH_V2.schematic_nerve : SURFACE_FINISH_V2.tissue);
 
   material.roughness = finish.roughness ?? 0.55;
-  if ("clearcoat" in material) {
+  if (material.isMeshPhysicalMaterial) {
     material.clearcoat = finish.clearcoat ?? 0;
     material.clearcoatRoughness = finish.clearcoatRoughness ?? 0.5;
-  }
-  if ("sheen" in material) {
     material.sheen = finish.sheen ?? 0;
     material.sheenRoughness = finish.sheenRoughness ?? 1;
-    if (finish.sheenColor) material.sheenColor.set(finish.sheenColor);
-  }
-  if ("transmission" in material) {
+    if (finish.sheenColor && material.sheenColor) material.sheenColor.set(finish.sheenColor);
     material.transmission = finish.transmission ?? 0;
     material.thickness = finish.thickness ?? 0;
   }

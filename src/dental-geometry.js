@@ -44,7 +44,7 @@ const colors = {
   dentin: 0xe5b861,
   pulp: 0xd8495c,
   cementum: 0xc8a173,
-  pdl: 0x93c4bf,
+  pdl: 0xc27084,
   bone: 0xd4bfa2,
   gingiva: 0xcf798c,
 };

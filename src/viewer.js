@@ -202,14 +202,24 @@ export async function createViewer(host, atlas, handlers) {
     const finish = finishFor(part);
     const lite = preferLiteMaterial(part);
     const MaterialCtor = lite ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
-    const material = new MaterialCtor({
+    const materialOptions = {
       color: partColor(part, groups, { presentation: "clinical" }),
       metalness: 0,
       side: THREE.DoubleSide,
       emissive: "#000000",
       emissiveIntensity: 0,
-      ...(part.schematic ? { roughness: 0.65, envMapIntensity: 0.55 } : finish),
-    });
+      roughness: part.schematic ? 0.65 : (finish.roughness ?? 0.55),
+      envMapIntensity: part.schematic ? 0.55 : (finish.envMapIntensity ?? 0.75),
+    };
+    if (!lite) {
+      if (finish.clearcoat !== undefined) materialOptions.clearcoat = finish.clearcoat;
+      if (finish.clearcoatRoughness !== undefined) materialOptions.clearcoatRoughness = finish.clearcoatRoughness;
+      if (finish.sheen !== undefined) materialOptions.sheen = finish.sheen;
+      if (finish.sheenRoughness !== undefined) materialOptions.sheenRoughness = finish.sheenRoughness;
+      if (finish.transmission !== undefined) materialOptions.transmission = finish.transmission;
+      if (finish.thickness !== undefined) materialOptions.thickness = finish.thickness;
+    }
+    const material = new MaterialCtor(materialOptions);
     if (!lite || part.schematic) {
       applyFinishToMaterial(material, part, {
         schematic: !!part.schematic,
@@ -433,6 +443,39 @@ export async function createViewer(host, atlas, handlers) {
   pin.add(beadMesh, haloMesh, pinLabel);
   scene.add(pin);
   let pinnedLandmark = null;
+
+  const laSimulatorGroup = new THREE.Group();
+  laSimulatorGroup.visible = false;
+  const needleShaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0003, 0.0003, 0.035, 12),
+    new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      metalness: 0.9,
+      roughness: 0.2,
+    }),
+  );
+  const needleHub = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0016, 0.0012, 0.008, 12),
+    new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      metalness: 0.1,
+      roughness: 0.4,
+    }),
+  );
+  needleHub.position.set(0, -0.02, 0);
+  const diffusionField = new THREE.Mesh(
+    new THREE.SphereGeometry(0.012, 24, 18),
+    new THREE.MeshBasicMaterial({
+      color: 0x00c8ff,
+      transparent: true,
+      opacity: 0.35,
+      toneMapped: false,
+      depthWrite: false,
+    }),
+  );
+  diffusionField.position.set(0, 0.018, 0);
+  laSimulatorGroup.add(needleShaft, needleHub, diffusionField);
+  scene.add(laSimulatorGroup);
 
   function sizePin() {
     if (!pin.visible) return;
@@ -1593,6 +1636,42 @@ export async function createViewer(host, atlas, handlers) {
       currentState.isolated = !currentState.isolated || currentState.selected !== partId;
       currentState.selected = partId;
       api.update(currentState);
+    },
+    showLASimulator(protocolId) {
+      if (!protocolId) {
+        laSimulatorGroup.visible = false;
+        render();
+        return;
+      }
+      laSimulatorGroup.visible = true;
+      const mForamen = [0.032, 1.488, 0.018];
+      diffusionField.position.set(mForamen[0], mForamen[1], mForamen[2]);
+      needleShaft.position.set(mForamen[0] - 0.014, mForamen[1] - 0.004, mForamen[2] + 0.014);
+      needleShaft.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(0.7, 0.3, -0.65).normalize(),
+      );
+      needleHub.position.copy(needleShaft.position).addScaledVector(
+        new THREE.Vector3(-0.7, -0.3, 0.65).normalize(),
+        0.02,
+      );
+      renderBudget = Math.max(renderBudget, 4);
+      render();
+    },
+    tracePathway(pathwayId) {
+      for (const m of meshes) {
+        const isNerve = m.userData.part?.group === "nerves";
+        if (isNerve) {
+          m.material.emissive.set("#38bdf8");
+          m.material.emissiveIntensity = 0.85;
+        } else {
+          m.material.opacity = 0.28;
+          m.material.transparent = true;
+          m.material.depthWrite = false;
+        }
+      }
+      renderBudget = Math.max(renderBudget, 4);
+      render();
     },
     dispose() {
       cancelAnimationFrame(frame);
