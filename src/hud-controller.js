@@ -4,7 +4,7 @@
  * X-Ray sliders, and Studio turntable mode.
  */
 
-import { getToothData, CLINICAL_LA_PROTOCOLS } from "./anatomy-graph.js";
+import { getToothData, getStructureData, TOOTH_CLINICAL_GRAPH, CLINICAL_LA_PROTOCOLS } from "./anatomy-graph.js";
 import { createSearchIndex, queryIndex } from "./command-search.js";
 
 export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onSetTab }) {
@@ -192,7 +192,12 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
       if (overlay.classList.contains("open")) closeSpotlight();
       else openSpotlight();
     } else if (e.key === "Escape") {
-      if (overlay.classList.contains("open")) closeSpotlight();
+      if (overlay.classList.contains("open")) {
+        closeSpotlight();
+      } else if (inspectorCard.classList.contains("visible")) {
+        inspectorCard.classList.remove("visible");
+        if (onSelectPart) onSelectPart(null);
+      }
       if (isCleanModeActive) toggleCleanMode();
     } else if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
       e.preventDefault();
@@ -401,13 +406,47 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
       }
       inspBtnTrace.style.display = "block";
     } else {
-      inspFdi.textContent = "PART";
-      inspTitle.textContent = partId;
-      inspSub.textContent = "Anatomical Structure";
-      inspCanals.textContent = "Clinical morphology mapped in OMF Graph";
-      inspNerve.textContent = "Cranial / Maxillofacial innervation branch";
-      inspSafetySection.style.display = "none";
-      inspBtnTrace.style.display = "none";
+      const structInfo = getStructureData(partId);
+      const part = atlas?.parts ? atlas.parts.find((p) => p.id === partId) : null;
+
+      if (structInfo) {
+        const cat = structInfo.category.toLowerCase();
+        inspFdi.textContent = cat.includes("ganglion")
+          ? "GANGLION"
+          : cat.includes("sinus")
+          ? "SINUS"
+          : cat.includes("nerve")
+          ? "NERVE"
+          : "OMF";
+        inspTitle.textContent = part?.name || structInfo.name;
+        inspSub.textContent = structInfo.rootDivision || structInfo.category;
+        inspCanals.textContent = structInfo.distribution || structInfo.drainage || part?.note || "";
+        inspNerve.textContent = structInfo.roots || structInfo.innervation || structInfo.relations || "";
+        if (structInfo.clinicalPearl) {
+          inspSafetySection.style.display = "block";
+          inspSafety.textContent =
+            structInfo.clinicalPearl + (structInfo.laRelevance ? " " + structInfo.laRelevance : "");
+        } else {
+          inspSafetySection.style.display = "none";
+        }
+        inspBtnTrace.style.display = "none";
+      } else if (part) {
+        inspFdi.textContent = (part.group || "PART").toUpperCase();
+        inspTitle.textContent = part.name;
+        inspSub.textContent = part.schematic ? "OMF Teaching Geometry" : "BodyParts3D Segmentation";
+        inspCanals.textContent = part.note || "Standard anatomical feature";
+        inspNerve.textContent = `System: ${part.system || part.group || "Anatomical"}`;
+        inspSafetySection.style.display = "none";
+        inspBtnTrace.style.display = "none";
+      } else {
+        inspFdi.textContent = "PART";
+        inspTitle.textContent = partId;
+        inspSub.textContent = "Anatomical Structure";
+        inspCanals.textContent = "Clinical morphology mapped in OMF Graph";
+        inspNerve.textContent = "Cranial / Maxillofacial innervation branch";
+        inspSafetySection.style.display = "none";
+        inspBtnTrace.style.display = "none";
+      }
     }
 
     inspectorCard.classList.add("visible");

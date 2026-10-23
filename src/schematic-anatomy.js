@@ -270,6 +270,9 @@ export function deriveAnchors(parts, readVertices) {
   const sublingualGland = (s) => byId.get(s < 0 ? "FJ2767" : "FJ2765");
   const tongue = named(/^Tongue$/);
   const hyoid = byId.get("FJ3201") || byId.get("FJ2772");
+  const frontal = byId.get("FJ3200");
+  const sphenoid = byId.get("FJ3394");
+  const ethmoid = byId.get("FJ3199");
 
   return {
     tooth,
@@ -300,6 +303,9 @@ export function deriveAnchors(parts, readVertices) {
     sublingualBounds: (s) => sublingualGland(s).bounds,
     tongueBounds: tongue?.bounds,
     hyoidBounds: hyoid?.bounds,
+    frontalBounds: frontal?.bounds,
+    sphenoidBounds: sphenoid?.bounds,
+    ethmoidBounds: ethmoid?.bounds,
   };
 }
 
@@ -680,6 +686,48 @@ const STRUCTURES = [
       ];
     },
   },
+
+  // Autonomic parasympathetic ganglia of the head and neck.
+  {
+    key: "otic-ganglion",
+    name: "Otic ganglion",
+    group: "nerves",
+    note: "Parasympathetic ganglion situated directly medial to the mandibular nerve (V3) trunk just below the foramen ovale. Relays preganglionic secretomotor fibers from the glossopharyngeal nerve (CN IX) via the lesser petrosal nerve to the parotid gland via the auriculotemporal nerve.",
+    volume: (a, s) => {
+      const ov = a.foramenOvale(s);
+      return {
+        center: [ov[0] - s * 0.0035, ov[1] - 0.0025, ov[2] - 0.001],
+        radii: [0.0020, 0.0022, 0.0018],
+      };
+    },
+  },
+  {
+    key: "pterygopalatine-ganglion",
+    name: "Pterygopalatine ganglion",
+    group: "nerves",
+    note: "Parasympathetic ganglion suspended from the maxillary nerve (V2) in the pterygopalatine fossa, anterior to the pterygoid canal. Relays secretomotor fibers from the greater petrosal nerve (CN VII) to the lacrimal gland, nasal mucosa, and palatine salivary glands.",
+    volume: (a, s) => {
+      const fossa = a.pterygopalatineFossa(s);
+      return {
+        center: [fossa[0], fossa[1] - 0.002, fossa[2] + 0.001],
+        radii: [0.0022, 0.0025, 0.0020],
+      };
+    },
+  },
+  {
+    key: "submandibular-ganglion",
+    name: "Submandibular ganglion",
+    group: "nerves",
+    note: "Small parasympathetic ganglion suspended from the lingual nerve in the submandibular space, resting on the hyoglossus muscle superior to the deep lobe of the submandibular gland. Relays presynaptic secretomotor fibers from the chorda tympani (CN VII) to the submandibular and sublingual salivary glands.",
+    volume: (a, s) => {
+      const third = a.tooth(s < 0 ? 47 : 37).lingual(0.004);
+      const first = a.tooth(s < 0 ? 46 : 36).lingual(0.004);
+      return {
+        center: [(third[0] + first[0]) / 2, (third[1] + first[1]) / 2 - 0.005, (third[2] + first[2]) / 2],
+        radii: [0.0018, 0.0018, 0.0018],
+      };
+    },
+  },
   {
     key: "greater-auricular-nerve",
     name: "Greater auricular nerve",
@@ -1010,6 +1058,36 @@ const STRUCTURES = [
           (first.apex[2] + premolar.apex[2]) / 2,
         ],
         radii: [0.0085, (hi[1] - first.apex[1]) / 2 + 0.002, Math.max(0.010, (hi[2] - lo[2]) / 4)],
+      };
+    },
+  },
+  {
+    key: "frontal-sinus",
+    name: "Frontal sinus",
+    group: "airway",
+    note: "Paired pneumatic cavity within the squama frontalis of the frontal bone, superior to the orbits and nasion, separated by the interfrontal septum. Drains into the middle nasal meatus via the frontonasal duct. Shown as a schematic cavity; the source dataset has no sinus mesh.",
+    volume: (a, s) => {
+      const fb = a.frontalBounds;
+      const centerY = fb ? fb[0][1] + 0.025 : 1.624;
+      const centerZ = fb ? fb[1][2] - 0.013 : 0.064;
+      return {
+        center: [s * 0.008, centerY, centerZ],
+        radii: [0.0060, 0.0085, 0.0055],
+      };
+    },
+  },
+  {
+    key: "sphenoid-sinus",
+    name: "Sphenoid sinus",
+    group: "airway",
+    note: "Paired pneumatic cavity within the body of the sphenoid bone, separated by a thin intersphenoidal septum. Sits immediately inferior to the sella turcica and optic chiasm, draining anteriorly into the sphenoethmoidal recess. Shown as a schematic cavity; the source dataset has no sinus mesh.",
+    volume: (a, s) => {
+      const sb = a.sphenoidBounds;
+      const centerY = sb ? (sb[0][1] + sb[1][1]) / 2 - 0.008 : 1.583;
+      const centerZ = sb ? (sb[0][2] + sb[1][2]) / 2 + 0.002 : 0.020;
+      return {
+        center: [s * 0.0065, centerY, centerZ],
+        radii: [0.0055, 0.0070, 0.0065],
       };
     },
   },

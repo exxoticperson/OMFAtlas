@@ -338,3 +338,55 @@ test("every named landmark is a point found on the bone it is offered on", () =>
     );
   }
 });
+
+test("autonomic ganglia are present, bilateral, and sit at their anatomical cranial anchors", () => {
+  for (const [suffix, side] of [["-r", -1], ["-l", 1]]) {
+    const otic = byId.get(`SCH-otic-ganglion${suffix}`);
+    assert.ok(otic, `missing otic ganglion ${suffix}`);
+    const ov = anchors.foramenOvale(side);
+    const oticCenter = (otic.bounds[0][0] + otic.bounds[1][0]) / 2;
+    // Otic ganglion sits medial to the foramen ovale / V3 trunk
+    assert.ok(
+      Math.abs(oticCenter) < Math.abs(ov[0]),
+      `otic ganglion should sit medial to foramen ovale`,
+    );
+
+    const ppg = byId.get(`SCH-pterygopalatine-ganglion${suffix}`);
+    assert.ok(ppg, `missing pterygopalatine ganglion ${suffix}`);
+    const fossa = anchors.pterygopalatineFossa(side);
+    const ppgCenter = ppg.bounds[0].map((lo, i) => (lo + ppg.bounds[1][i]) / 2);
+    assert.ok(
+      Math.hypot(ppgCenter[0] - fossa[0], ppgCenter[1] - fossa[1], ppgCenter[2] - fossa[2]) < 0.010,
+      `pterygopalatine ganglion should sit within the pterygopalatine fossa`,
+    );
+
+    const smg = byId.get(`SCH-submandibular-ganglion${suffix}`);
+    assert.ok(smg, `missing submandibular ganglion ${suffix}`);
+    const molar = anchors.tooth(side < 0 ? 47 : 37);
+    assert.ok(
+      smg.bounds[1][1] <= molar.apex[1] + 0.010,
+      `submandibular ganglion should sit adjacent to the molar roots in the submandibular space`,
+    );
+  }
+});
+
+test("paranasal sinuses include frontal, sphenoid and maxillary with accurate containment", () => {
+  for (const [suffix, side] of [["-r", -1], ["-l", 1]]) {
+    const frontal = byId.get(`SCH-frontal-sinus${suffix}`);
+    assert.ok(frontal, `missing frontal sinus ${suffix}`);
+    const fb = anchors.frontalBounds;
+    if (fb) {
+      assert.ok(inside(fb, frontal.bounds, 0.008), `frontal sinus should sit within frontal bone bounds`);
+    }
+
+    const sphenoid = byId.get(`SCH-sphenoid-sinus${suffix}`);
+    assert.ok(sphenoid, `missing sphenoid sinus ${suffix}`);
+    const sb = anchors.sphenoidBounds;
+    if (sb) {
+      assert.ok(inside(sb, sphenoid.bounds, 0.008), `sphenoid sinus should sit within sphenoid bone bounds`);
+    }
+
+    const maxillary = byId.get(`SCH-maxillary-sinus${suffix}`);
+    assert.ok(maxillary, `missing maxillary sinus ${suffix}`);
+  }
+});

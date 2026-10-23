@@ -592,3 +592,109 @@ export function getToothData(id) {
   }
   return null;
 }
+
+/**
+ * High-yield OMF anatomical structures and autonomic relays.
+ */
+export const OMF_STRUCTURES_GRAPH = {
+  "SCH-otic-ganglion": {
+    name: "Otic Ganglion",
+    category: "Autonomic Parasympathetic Ganglion",
+    rootDivision: "CN IX (Glossopharyngeal) / CN V3 (Mandibular)",
+    roots: "Preganglionic: Lesser Petrosal Nerve (IX) via tympanic plexus; Sympathetic: Middle Meningeal Plexus",
+    distribution: "Postganglionic secretomotor fibers hitchhike via Auriculotemporal Nerve (V3) to Parotid Gland",
+    clinicalPearl: "Frey's Syndrome: Misdirected regenerating parasympathetic secretomotor fibers reinnervate cutaneous sweat glands of the cheek following parotidectomy, causing gustatory sweating.",
+    laRelevance: "Sits medial to V3 trunk in infratemporal fossa immediately inferior to foramen ovale.",
+  },
+  "SCH-pterygopalatine-ganglion": {
+    name: "Pterygopalatine Ganglion (Meckel's)",
+    category: "Autonomic Parasympathetic Ganglion",
+    rootDivision: "CN VII (Facial) / CN V2 (Maxillary)",
+    roots: "Preganglionic: Greater Petrosal Nerve (VII) joining Deep Petrosal (sympathetic) to form Vidian Nerve",
+    distribution: "Postganglionic secretomotor fibers distribute with V2 zygomatic branch to Lacrimal Gland, and nasal/palatine branches to mucosa",
+    clinicalPearl: "Sphenopalatine Ganglion (SPG) Block: Performed transnasally or via greater palatine canal for acute abortive treatment of cluster headaches and trigeminal neuralgia.",
+    laRelevance: "Suspended in pterygopalatine fossa behind maxillary tuberosity; anesthetized during High Tuberosity Maxillary Nerve Block.",
+  },
+  "SCH-submandibular-ganglion": {
+    name: "Submandibular Ganglion",
+    category: "Autonomic Parasympathetic Ganglion",
+    rootDivision: "CN VII (Facial via Chorda Tympani) / CN V3 (Lingual)",
+    roots: "Preganglionic secretomotor fibers from Chorda Tympani hitchhiking along Lingual Nerve",
+    distribution: "Postganglionic secretomotor fibers supply Submandibular and Sublingual Salivary Glands",
+    clinicalPearl: "Vulnerable to traction or transection during lingual plate flap reflection for impacted third molars or submandibular gland excision.",
+    laRelevance: "Suspended directly from lingual nerve adjacent to lower molar roots in the floor of the mouth.",
+  },
+  "SCH-frontal-sinus": {
+    name: "Frontal Sinus",
+    category: "Paranasal Sinus",
+    rootDivision: "Respiratory Airway / Neurocranium",
+    drainage: "Middle nasal meatus via frontonasal duct (ethmoidal infundibulum)",
+    innervation: "Supraorbital and supratrochlear nerves (CN V1)",
+    clinicalPearl: "Pott's Puffy Tumor: Subperiosteal abscess and osteomyelitis of the frontal bone secondary to untreated frontal sinusitis. Mucoceles can erode posterior table into anterior cranial fossa.",
+  },
+  "SCH-sphenoid-sinus": {
+    name: "Sphenoid Sinus",
+    category: "Paranasal Sinus",
+    rootDivision: "Respiratory Airway / Central Skull Base",
+    drainage: "Sphenoethmoidal recess directly above superior nasal concha",
+    relations: "Superior: Sella turcica & optic chiasm; Lateral: Cavernous sinus & internal carotid arteries; Posterior: Pons & basilar artery",
+    clinicalPearl: "Transsphenoidal Endoscopic Corridor: The surgical doorway of choice for hypophysectomy and pituitary adenoma resection without craniotomy.",
+  },
+  "SCH-maxillary-sinus": {
+    name: "Maxillary Sinus (Antrum of Highmore)",
+    category: "Paranasal Sinus",
+    rootDivision: "Maxillofacial Skeleton",
+    drainage: "Middle nasal meatus via hiatus semilunaris (ostium sits high on medial wall)",
+    relations: "Floor lies intimately above apices of maxillary 1st and 2nd molars (and 2nd premolar)",
+    clinicalPearl: "Oroantral Communication (OAC): Root apex fracture or sinus perforation during upper molar extraction. Sinus lift (lateral window / crestal) is routine for pre-implant bone augmentation.",
+    laRelevance: "PSA and MSA nerve blocks penetrate near posterior and lateral walls.",
+  },
+  "SCH-inferior-alveolar-nerve": {
+    name: "Inferior Alveolar Nerve (IAN)",
+    category: "Major Sensory Trunk (CN V3)",
+    rootDivision: "Mandibular Division of Trigeminal Nerve",
+    distribution: "Pulpal innervation to entire mandibular quadrant; terminal branches are mental and incisive nerves",
+    clinicalPearl: "Target of IAN Block (Spix / Halsted). CBCT evaluation of cortical bone proximity to mandibular 3rd molar apices is essential to avoid permanent neurosensory deficit (paresthesia/dysesthesia).",
+    laRelevance: "Enters mandibular foramen behind lingula; target depth 20-25mm over contralateral premolars.",
+  },
+  "SCH-lingual-nerve": {
+    name: "Lingual Nerve",
+    category: "General Sensory & Special Taste Carrier (V3 + VII)",
+    rootDivision: "Mandibular Nerve (V3) anterior trunk",
+    distribution: "Sensory to anterior 2/3 tongue, lingual gingiva of lower arch, floor of mouth; carries Chorda Tympani fibers",
+    clinicalPearl: "Runs within 2 mm of the lingual plate at the 3rd molar region. Lingual retraction must be performed with surgical caution to prevent permanent gustatory and tactile loss.",
+    laRelevance: "Anesthetized upon withdrawal (10mm) during conventional IANB.",
+  },
+  "SCH-chorda-tympani": {
+    name: "Chorda Tympani",
+    category: "Special Sensory (Taste) & Secretomotor (CN VII)",
+    rootDivision: "Nervus intermedius of Facial Nerve",
+    distribution: "Taste to anterior two-thirds of tongue; secretomotor to submandibular & sublingual glands",
+    clinicalPearl: "Traverses the middle ear cavity between malleus and incus; susceptible to damage during middle ear surgery (causing metallic taste dysgeusia).",
+  },
+  "SCH-parotid-gland": {
+    name: "Parotid Gland & Stensen's Duct",
+    category: "Major Salivary Gland",
+    rootDivision: "Serous Salivary Secretion",
+    distribution: "Stensen's duct pierces buccinator muscle and opens opposite upper second molar (FDI 17/27)",
+    clinicalPearl: "Facial nerve (CN VII) traverses gland substance, dividing into five terminal branches (temporal, zygomatic, buccal, marginal mandibular, cervical). Facial palsy risk during parotid surgery.",
+  },
+  "SCH-articular-disc": {
+    name: "Articular Disc of TMJ",
+    category: "Temporomandibular Joint",
+    rootDivision: "Craniomandibular Articulation",
+    distribution: "Divides TMJ into upper translational cavity and lower rotational cavity",
+    clinicalPearl: "Internal Derangement: Anterior disc displacement with reduction (reciprocal click) vs. without reduction (closed lock with jaw deflection to affected side).",
+  },
+};
+
+/**
+ * Returns OMF clinical record by part ID.
+ * @param {string} partId
+ */
+export function getStructureData(partId) {
+  if (!partId) return null;
+  // Match exact ID or base schematic prefix (e.g., SCH-otic-ganglion-r -> SCH-otic-ganglion)
+  const baseId = partId.replace(/-[rl]$/, "");
+  return OMF_STRUCTURES_GRAPH[baseId] || OMF_STRUCTURES_GRAPH[partId] || null;
+}
