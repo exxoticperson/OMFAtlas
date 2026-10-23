@@ -1,5 +1,9 @@
 import "./style.css";
 import "./design-v2.css";
+import "./design-hud.css";
+import { initModernHUD } from "./hud-controller.js";
+
+let modernHUD = null;
 import { initShellNav } from "./shell-nav.js";
 import { PRESENTATIONS } from "./realism-v2.js";
 import { readQualityMode, QUALITY_KEY } from "./perf.js";
@@ -668,6 +672,7 @@ function setAge(age) {
 function clearSelection() {
   const wasDetail = state.toothDetail;
   state.selected = null;
+  modernHUD?.updateInspector(null);
   state.topic = "";
   state.isolated = false;
   state.toothDetail = false;
@@ -710,6 +715,7 @@ function selectPart(id, options = {}) {
   updateScene();
   renderBrowser();
   renderInspector();
+  modernHUD?.updateInspector(id, fdi);
   renderTeaching();
   showDetails();
   if (state.isolated) viewer?.view("oblique", true);
@@ -2086,6 +2092,14 @@ try {
     onReady: () => {
       document.querySelector("#load-status").hidden = true;
       embedBridge?.postReady();
+      modernHUD = initModernHUD({
+        host: document.querySelector("#viewer"),
+        atlas,
+        state,
+        viewerApi: viewer,
+        onSelectPart: (partId) => selectPart(partId),
+        onSetTab: (tabId) => setTab(tabId),
+      });
     },
     onProgress: (percent) => {
       const bar = document.querySelector("#load-bar");

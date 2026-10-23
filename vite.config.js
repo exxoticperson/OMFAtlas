@@ -44,7 +44,15 @@ export default defineConfig({
         main: resolve(root, "index.html"),
         embed: resolve(root, "embed.html"),
       },
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/three")) {
+            return "three-vendor";
+          }
+        },
+      },
     },
+    chunkSizeWarningLimit: 650,
   },
   plugins: [embedCsp()],
 });

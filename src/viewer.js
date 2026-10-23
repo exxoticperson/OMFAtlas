@@ -754,10 +754,18 @@ export async function createViewer(host, atlas, handlers) {
   // The frame loop. It eases the explosion toward its target, at the same rate
   // as the reference (a damped approach, not a fixed-length tween, so a
   // reversal mid-flight turns round smoothly), and steps the orbit damping.
+  let turntableActive = false;
   let frame = 0,
     lastFrame = 0,
     renderBudget = 2;
   function tick(now) {
+    if (turntableActive) {
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 1.6;
+      renderBudget = Math.max(renderBudget, 2);
+    } else {
+      controls.autoRotate = false;
+    }
     frame = requestAnimationFrame(tick);
     const delta = Math.min((now - lastFrame) / 1000 || 0.016, 0.05);
     lastFrame = now;
@@ -1454,6 +1462,7 @@ export async function createViewer(host, atlas, handlers) {
           setOralStudioLighting(lightRig, false);
           controls.dampingFactor = defaultDamping;
           oralCameraTween = null;
+          cachedPresentation = '';
         }
       }
       if (intraoralTab) {
@@ -1567,6 +1576,23 @@ export async function createViewer(host, atlas, handlers) {
       controls.update();
       render();
       applyingZoom = false;
+    },
+    setTurntable(active) {
+      turntableActive = !!active;
+      controls.autoRotate = turntableActive;
+      if (turntableActive) renderBudget = Math.max(renderBudget, 4);
+    },
+    setGroupOpacity(group, val) {
+      if (!currentState) return;
+      if (!currentState.opacity) currentState.opacity = new Map();
+      currentState.opacity.set(group, val);
+      api.update(currentState);
+    },
+    soloPart(partId) {
+      if (!currentState) return;
+      currentState.isolated = !currentState.isolated || currentState.selected !== partId;
+      currentState.selected = partId;
+      api.update(currentState);
     },
     dispose() {
       cancelAnimationFrame(frame);
