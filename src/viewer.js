@@ -239,6 +239,25 @@ export async function createViewer(host, atlas, handlers) {
       material.roughness = 0.28;
     }
     if (part.schematic) geometry.computeVertexNormals();
+    const nLower = String(part.name || "").toLowerCase();
+    if (part.group === "skin") {
+      material.polygonOffset = true;
+      material.polygonOffsetFactor = -3.0;
+      material.polygonOffsetUnits = -6.0;
+      material.depthTest = true;
+      material.depthWrite = true;
+      material.roughness = 0.54;
+      material.clearcoat = 0.06;
+      material.clearcoatRoughness = 0.45;
+    }
+    if (/cornea/.test(nLower)) {
+      material.transparent = true;
+      material.transmission = 0.98;
+      material.opacity = 0.12;
+      material.roughness = 0.02;
+      material.clearcoat = 1.0;
+      material.depthWrite = false;
+    }
     const mesh = new THREE.Mesh(geometry, material);
     mesh.userData.part = part;
     scene.add(mesh);

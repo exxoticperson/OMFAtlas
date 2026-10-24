@@ -1687,9 +1687,17 @@ function setTab(tab) {
   }
   if (tab === "anatomy") {
     state.arches = false;
+    state.toothDetail = false;
+    state.schematic = true;
+    state.isolated = false;
+    state.layers = new Set(PRESENTATIONS[state.presentation]?.layers ?? DEFAULT_LAYERS);
     document.querySelector("#source-caption").textContent =
       "BodyParts3D 4.0 · Adult reference";
-    if (atlas) renderBrowser();
+    if (atlas) {
+      renderBrowser();
+      updateScene();
+      requestAnimationFrame(() => viewer?.view("oblique", true));
+    }
   }
   // Every tab except anatomy renders into the inspector, so the panel has to
   // be open or the tab looks empty. Anatomy keeps it open when a structure is
@@ -2098,6 +2106,7 @@ try {
         viewerApi: viewer,
         onSelectPart: (partId) => selectPart(partId),
         onSetTab: (tabId) => setTab(tabId),
+        onExplode: (val) => setExplosion(val),
       });
     },
     onProgress: (percent) => {

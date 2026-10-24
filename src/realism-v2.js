@@ -316,14 +316,15 @@ export function partColor(part, groups, { presentation = "clinical", selected = 
   let base = palette?.[part.group] ?? groups[part.group]?.color ?? "#cccccc";
 
   if (part.group === "eyes") {
-    if (/cornea|lens/.test(n)) return "#e8f4ff";
-    if (/iris/.test(n)) return "#3d5a48";
-    if (/sclera/.test(n)) return "#f0eeea";
-    if (/retina|choroid|choroidea/.test(n)) return "#6a2828";
+    if (/cornea|lens/.test(n)) return "#f8fafc";
+    if (/iris/.test(n)) return "#1f2937"; // Deep natural iris with dark pupil
+    if (/sclera/.test(n)) return "#f3eee6"; // Realistic off-white vascularized sclera
+    if (/tarsal/.test(n)) return "#c99a88"; // Eyelid margin flesh tone (not bright red)
+    if (/retina|choroid|choroidea/.test(n)) return "#582020";
   }
   if (part.group === "skin") {
-    if (/lip|vermilion/.test(n)) return "#c87878";
-    return "#c9a48c";
+    if (/lip|vermilion/.test(n)) return "#c26e74";
+    return "#e2b8a2"; // Natural warm lifelike skin complexion
   }
   if (part.group === "bones" || part.group === "neck") {
     if (/mandible|maxilla/.test(n)) return "#e0d8c8";

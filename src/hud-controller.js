@@ -7,7 +7,7 @@
 import { getToothData, getStructureData, TOOTH_CLINICAL_GRAPH, CLINICAL_LA_PROTOCOLS } from "./anatomy-graph.js";
 import { createSearchIndex, queryIndex } from "./command-search.js";
 
-export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onSetTab }) {
+export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onSetTab, onExplode }) {
   let searchIndex = [];
   let isTurntableActive = false;
   let isCleanModeActive = false;
@@ -38,6 +38,19 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
       </div>
 
       <div class="hud-island hud-interactive">
+        <button type="button" class="hud-icon-btn" id="hud-btn-theme" title="Toggle Light / Dark Mode">
+          <svg id="hud-theme-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        </button>
         <button type="button" class="hud-icon-btn" id="hud-btn-layers" title="Toggle Anatomy Layers">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
@@ -69,6 +82,30 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
     <div id="omf-studio-banner">
       <span class="studio-rec-dot"></span>
       <span>STUDIO TURNTABLE · 360° REVOLUTION</span>
+    </div>
+
+    <!-- Floating Dissect / Separate Control Island -->
+    <div id="omf-dissect-control" class="hud-interactive" aria-label="Dissection and Separation Control">
+      <div class="dissect-header">
+        <div class="dissect-title-wrap">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <span class="dissect-title">DISSECT &amp; SEPARATE</span>
+        </div>
+        <span class="dissect-badge" id="dissect-val-badge">0% · Assembled</span>
+      </div>
+      <div class="dissect-slider-row">
+        <span class="dissect-endpoint">Assembled</span>
+        <input type="range" id="dissect-range" min="0" max="100" value="0" class="dissect-slider" aria-label="Dissect and separate structures">
+        <span class="dissect-endpoint">Inventory</span>
+        <button type="button" class="dissect-reset-btn" id="dissect-btn-reset" title="Reassemble all structures to anatomical position">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          <span>Reset</span>
+        </button>
+      </div>
     </div>
 
     <!-- Floating Bottom Dock -->
@@ -310,13 +347,38 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
 
       if (mode === "anatomy") {
         glassControls.classList.remove("visible");
+        toggleLASimulator(false);
+        // Restore standard opacity
+        if (viewerApi?.setGroupOpacity) {
+          viewerApi.setGroupOpacity("teeth", 1.0);
+          viewerApi.setGroupOpacity("bones", 1.0);
+        }
+        enamelSlider.value = "100";
+        boneSlider.value = "100";
+        enamelLabel.textContent = "100%";
+        boneLabel.textContent = "100%";
         onSetTab("anatomy");
       } else if (mode === "intraoral") {
         glassControls.classList.remove("visible");
+        toggleLASimulator(false);
         onSetTab("intraoral");
       } else if (mode === "xray") {
         glassControls.classList.add("visible");
+        toggleLASimulator(false);
         onSetTab("anatomy");
+        // Activate authentic CBCT / Panoramic X-Ray translucent diagnostic preset
+        if (viewerApi?.setGroupOpacity) {
+          viewerApi.setGroupOpacity("teeth", 0.42);
+          viewerApi.setGroupOpacity("bones", 0.35);
+        }
+        enamelSlider.value = "42";
+        boneSlider.value = "35";
+        enamelLabel.textContent = "42%";
+        boneLabel.textContent = "35%";
+        // Pulse internal alveolar canal innervation
+        if (viewerApi?.pulseInnervation) {
+          viewerApi.pulseInnervation("IAN");
+        }
       } else if (mode === "simulator") {
         glassControls.classList.remove("visible");
         toggleLASimulator(true);
@@ -345,6 +407,61 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
       viewerApi.setGroupOpacity("bones", val / 100);
     }
   });
+
+  // Theme Switcher Logic (Light / Dark)
+  const themeBtn = document.querySelector("#hud-btn-theme");
+  const themeIcon = document.querySelector("#hud-theme-icon");
+
+  function syncThemeIcon() {
+    const isDark = document.documentElement.dataset.theme !== "light";
+    if (themeIcon) {
+      themeIcon.innerHTML = isDark
+        ? '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>'
+        : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
+    }
+  }
+  syncThemeIcon();
+
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const isDark = document.documentElement.dataset.theme !== "light";
+      const nextTheme = isDark ? "light" : "dark";
+      document.documentElement.dataset.theme = nextTheme;
+      try { localStorage.setItem("omf-theme", nextTheme); } catch {}
+      syncThemeIcon();
+    });
+  }
+
+  // Dissect / Separation Slider Logic
+  const dissectRange = document.querySelector("#dissect-range");
+  const dissectBadge = document.querySelector("#dissect-val-badge");
+  const dissectReset = document.querySelector("#dissect-btn-reset");
+
+  function updateDissectUI(val) {
+    if (dissectRange) dissectRange.value = String(val);
+    if (dissectBadge) {
+      if (val === 0) dissectBadge.textContent = "0% · Assembled";
+      else if (val < 50) dissectBadge.textContent = `${val}% · Separating`;
+      else if (val < 90) dissectBadge.textContent = `${val}% · Dissected Stage`;
+      else dissectBadge.textContent = `${val}% · Parts Inventory`;
+    }
+  }
+
+  if (dissectRange) {
+    dissectRange.addEventListener("input", (e) => {
+      const val = parseInt(e.target.value, 10);
+      updateDissectUI(val);
+      if (onExplode) onExplode(val);
+    });
+  }
+
+  if (dissectReset) {
+    dissectReset.addEventListener("click", () => {
+      updateDissectUI(0);
+      if (onExplode) onExplode(0);
+      if (viewerApi?.view) viewerApi.view("oblique", true);
+    });
+  }
 
   // Layers Drawer Toggle
   const layersBtn = document.querySelector("#hud-btn-layers");

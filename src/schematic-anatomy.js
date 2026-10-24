@@ -922,8 +922,8 @@ const STRUCTURES = [
       const molar = a.tooth(s < 0 ? 16 : 26);
       const canine = a.tooth(s < 0 ? 13 : 23);
       return [
-        [start[0] * 1.22, start[1] + 0.006, start[2] + 0.002],
-        [gland[0] * 1.1, gland[1] + 0.002, gland[2] - 0.004],
+        [start[0] * 1.02, start[1] + 0.004, start[2] - 0.002],
+        [gland[0] * 0.98, gland[1] + 0.002, gland[2] - 0.004],
         shift(notch, s * 0.002, 0.001, 0.001),
         shift(molar.buccal(0.010), 0, 0.006, 0.004),
         shift(canine.buccal(0.008), 0, 0.012, 0.002),
@@ -1036,7 +1036,7 @@ const STRUCTURES = [
         shift(canine.buccal(0.011), 0, 0.014, 0.001),
         shift(molar.buccal(0.013), 0, 0.008, 0.002),
         shift(notch, s * 0.005, 0.001, 0),
-        [start[0] * 1.3, start[1] + 0.012, start[2] + 0.002],
+        [start[0] * 1.04, start[1] + 0.006, start[2] - 0.003],
       ];
     },
   },
@@ -1068,7 +1068,7 @@ const STRUCTURES = [
       return [
         [angle[0] * 1.02, angle[1] + 0.002, angle[2] - 0.012],
         [angle[0] * 1.12, angle[1] - 0.020, angle[2] - 0.012],
-        [start[0] * 1.9, start[1] - 0.004, start[2] - 0.006],
+        [start[0] * 1.08, start[1] - 0.004, start[2] - 0.006],
       ];
     },
   },
@@ -1101,8 +1101,8 @@ const STRUCTURES = [
       const head = a.condyle(s);
       const angle = a.gonion(s);
       return {
-        center: [head[0] * 1.24, (head[1] + angle[1]) / 2 - 0.002, head[2] - 0.010],
-        radii: [0.010, 0.019, 0.014],
+        center: [head[0] * 1.04, (head[1] + angle[1]) / 2 - 0.003, head[2] - 0.012],
+        radii: [0.0075, 0.0145, 0.0090],
       };
     },
   },
@@ -1117,7 +1117,7 @@ const STRUCTURES = [
       const angle = a.gonion(s);
       const first = a.tooth(s < 0 ? 16 : 26);
       const second = a.tooth(s < 0 ? 17 : 27);
-      const gland = [head[0] * 1.24, (head[1] + angle[1]) / 2 - 0.002, head[2] - 0.010];
+      const gland = [head[0] * 1.04, (head[1] + angle[1]) / 2 - 0.003, head[2] - 0.012];
       const papilla = shift(second.buccal(0.004), 0, 0.004, 0);
       return [
         gland,
