@@ -25,10 +25,9 @@ export const PRESENTATIONS = {
   },
   clinical: {
     label: "Clinical surface",
-    // Nerves/arteries/veins: source = mostly orbital BP3D; OMF branches are schematic (toggle Schematic).
+    // Core OMF layers: bones, dentition, and neurovasculature.
+    // Muscles, skin, brain and eyes are toggleable from layers but off by default so bones/teeth remain visible.
     layers: [
-      "skin",
-      "eyes",
       "bones",
       "teeth",
       "gingiva",
@@ -36,9 +35,9 @@ export const PRESENTATIONS = {
       "nerves",
       "arteries",
       "veins",
+      "glands",
       "soft",
       "airway",
-      "glands",
     ],
   },
 };
@@ -258,11 +257,12 @@ export const SURFACE_FINISH_V2 = {
     envMapIntensity: 0.65,
   },
   schematic_sinus: {
-    roughness: 0.85,
-    clearcoat: 0,
-    transmission: 0.08,
-    thickness: 0.2,
-    envMapIntensity: 0.45,
+    roughness: 0.28,
+    clearcoat: 0.22,
+    clearcoatRoughness: 0.25,
+    transmission: 0.72,
+    thickness: 0.25,
+    envMapIntensity: 0.90,
   },
   schematic_disc: {
     roughness: 0.64,
@@ -279,7 +279,11 @@ export const SURFACE_FINISH_V2 = {
 };
 
 export function partColor(part, groups, { presentation = "clinical", selected = false } = {}) {
-  if (selected) return presentation === "clinical" ? "#c9a227" : "#5b86ee";
+  const isSinus = part?.schematic && /sinus|antrum|cavity/i.test(part.name);
+  if (selected) {
+    if (isSinus) return presentation === "clinical" ? "#d48b8b" : "#38bdf8";
+    return presentation === "clinical" ? "#c9a227" : "#5b86ee";
+  }
   const n = name(part);
 
   if (part.schematic) {
@@ -344,7 +348,9 @@ export function partColor(part, groups, { presentation = "clinical", selected = 
 
 /** Emissive for update loop — clinical schematics stay dark (Astra-style). */
 export function materialEmissive(part, { presentation = "clinical", selected = false } = {}) {
+  const isSinus = part?.schematic && /sinus|antrum|cavity/i.test(part.name);
   if (selected) {
+    if (isSinus) return presentation === "clinical" ? "#241212" : "#0a223a";
     return presentation === "clinical" ? "#3d3010" : "#142349";
   }
   if (part.schematic) {

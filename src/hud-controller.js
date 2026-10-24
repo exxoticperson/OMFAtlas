@@ -141,6 +141,54 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
       </div>
     </aside>
 
+    <!-- Dedicated LA Simulator Floating Suite -->
+    <aside id="omf-la-simulator-card" aria-label="Local Anesthesia 3D Simulator">
+      <div class="la-card-header">
+        <div>
+          <span class="la-card-badge">CLINICAL LA SIMULATOR</span>
+          <div class="la-card-title" id="la-block-title">Inferior Alveolar Nerve Block (IANB)</div>
+          <div class="la-card-sub" id="la-block-sub">Halsted / Spix Mandibular Block</div>
+        </div>
+        <button type="button" class="hud-icon-btn" id="la-close-btn" aria-label="Close Simulator">✕</button>
+      </div>
+
+      <!-- Protocol Selection Pills -->
+      <div class="la-pills-row">
+        <button type="button" class="la-pill-btn active" data-protocol="ianb">IANB</button>
+        <button type="button" class="la-pill-btn" data-protocol="mental">Mental</button>
+        <button type="button" class="la-pill-btn" data-protocol="psa">PSA</button>
+        <button type="button" class="la-pill-btn" data-protocol="infraorbital">Infraorbital</button>
+        <button type="button" class="la-pill-btn" data-protocol="greater_palatine">Palatine</button>
+      </div>
+
+      <div class="la-specs-grid">
+        <div class="la-spec-item">
+          <div class="la-spec-label">Target Landmark & Depth</div>
+          <div class="la-spec-val" id="la-spec-landmark">Pterygomandibular space (20-25 mm)</div>
+        </div>
+        <div class="la-spec-item">
+          <div class="la-spec-label">Needle Gauge & Length</div>
+          <div class="la-spec-val" id="la-spec-gauge">25G / 27G Long (32mm)</div>
+        </div>
+        <div class="la-spec-item">
+          <div class="la-spec-label">Anesthetized Field</div>
+          <div class="la-spec-val" id="la-spec-field">Lower quadrant pulpal & lingual tissues</div>
+        </div>
+        <div class="la-spec-item">
+          <div class="la-spec-label">Complication Avoidance</div>
+          <div class="la-spec-val highlight" id="la-spec-pearl">Bone contact mandatory to avoid parotid gland penetration</div>
+        </div>
+      </div>
+
+      <div class="la-actions-row">
+        <button type="button" class="la-action-btn primary" id="la-btn-pulse">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Pulse Nerve Deposition</span>
+        </button>
+        <button type="button" class="la-action-btn" id="la-btn-clear">Clear Block</button>
+      </div>
+    </aside>
+
     <!-- Command Spotlight Modal (Cmd+K) -->
     <div id="omf-spotlight-overlay" role="dialog" aria-modal="true" aria-label="Anatomy Spotlight Search">
       <div class="spotlight-card">
@@ -271,7 +319,7 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
         onSetTab("anatomy");
       } else if (mode === "simulator") {
         glassControls.classList.remove("visible");
-        showLASimulatorModal();
+        toggleLASimulator(true);
       }
     });
   });
@@ -356,6 +404,7 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
   const inspBtnTrace = document.querySelector("#insp-btn-trace");
 
   let activePartId = null;
+  let activeToothFdi = null;
 
   function updateInspectorForProtocol(proto) {
     inspFdi.textContent = "LA BLOCK";
@@ -375,18 +424,29 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
     if (!partId) {
       inspectorCard.classList.remove("visible");
       activePartId = null;
+      activeToothFdi = null;
+      isPartSoloed = false;
+      inspBtnSolo.textContent = "Solo View";
+      inspBtnSolo.classList.remove("primary");
       return;
     }
     activePartId = partId;
+    activeToothFdi = fdi;
+    isPartSoloed = false;
+    inspBtnSolo.textContent = "Solo View";
+    inspBtnSolo.classList.remove("primary");
 
     // Check tooth clinical graph
     let toothInfo = null;
-    if (fdi) toothInfo = getToothData(fdi);
-    else {
-      // Find by partId
+    if (fdi) {
+      toothInfo = getToothData(fdi);
+      activeToothFdi = fdi;
+    } else {
+      // Find by partId or FDI in name
       for (const t of Object.values(TOOTH_CLINICAL_GRAPH)) {
-        if (t.bp3dId === partId) {
+        if (t.bp3dId === partId || partId.includes(String(t.fdi))) {
           toothInfo = t;
+          activeToothFdi = t.fdi;
           break;
         }
       }
@@ -457,34 +517,97 @@ export function initModernHUD({ host, atlas, state, viewerApi, onSelectPart, onS
     if (onSelectPart) onSelectPart(null);
   });
 
+  let isPartSoloed = false;
   inspBtnSolo.addEventListener("click", () => {
     if (activePartId && viewerApi?.soloPart) {
-      viewerApi.soloPart(activePartId);
+      isPartSoloed = !isPartSoloed;
+      viewerApi.soloPart(activePartId, { ghostContext: true });
+      inspBtnSolo.textContent = isPartSoloed ? "Exit Solo" : "Solo View";
+      inspBtnSolo.classList.toggle("primary", isPartSoloed);
     }
   });
 
   inspBtnTrace.addEventListener("click", () => {
-    // Highlight neural tree
-    if (viewerApi?.tracePathway) {
-      viewerApi.tracePathway("IAN");
+    if (viewerApi?.pulseInnervation) {
+      const nerveTarget = activeToothFdi ? String(activeToothFdi) : activePartId || "IAN";
+      viewerApi.pulseInnervation(nerveTarget);
+      const originalText = inspBtnTrace.textContent;
+      inspBtnTrace.textContent = "⚡ Pulsing Conduction...";
+      setTimeout(() => {
+        inspBtnTrace.textContent = originalText;
+      }, 2500);
     }
   });
 
-  // Local Anesthesia Simulator Modal
-  function showLASimulatorModal() {
-    openSpotlight();
-    searchInput.value = "block";
-    renderResults(
-      Object.values(CLINICAL_LA_PROTOCOLS).map((p) => ({
-        id: p.id,
-        title: p.name,
-        subtitle: `${p.subtitle} · Target: ${p.targetLandmark}`,
-        badge: "LA Protocol",
-        category: "Local Anesthesia Simulator",
-        action: { type: "laProtocol", protocol: p },
-      }))
-    );
+  // Dedicated Local Anesthesia Simulator Suite
+  const laCard = document.querySelector("#omf-la-simulator-card");
+  const laBlockTitle = document.querySelector("#la-block-title");
+  const laBlockSub = document.querySelector("#la-block-sub");
+  const laSpecLandmark = document.querySelector("#la-spec-landmark");
+  const laSpecGauge = document.querySelector("#la-spec-gauge");
+  const laSpecField = document.querySelector("#la-spec-field");
+  const laSpecPearl = document.querySelector("#la-spec-pearl");
+  const laCloseBtn = document.querySelector("#la-close-btn");
+  const laBtnPulse = document.querySelector("#la-btn-pulse");
+  const laBtnClear = document.querySelector("#la-btn-clear");
+  const laPills = document.querySelectorAll(".la-pill-btn");
+
+  let currentProtocolId = "ianb";
+
+  function updateLASimulatorData(protoId) {
+    currentProtocolId = protoId;
+    const proto = CLINICAL_LA_PROTOCOLS[protoId] || CLINICAL_LA_PROTOCOLS.ianb;
+    laBlockTitle.textContent = proto.name;
+    laBlockSub.textContent = proto.subtitle;
+    laSpecLandmark.textContent = `${proto.targetLandmark} (${proto.penetrationDepth})`;
+    laSpecGauge.textContent = proto.needleGauge;
+    laSpecField.textContent = `${proto.anesthetizedTeeth} | ${proto.softTissue}`;
+    laSpecPearl.textContent = proto.clinicalPearls;
+
+    laPills.forEach((p) => {
+      p.classList.toggle("active", p.dataset.protocol === protoId);
+    });
+
+    if (viewerApi?.showLASimulator) {
+      viewerApi.showLASimulator(protoId);
+    }
   }
+
+  function toggleLASimulator(open = true) {
+    if (open) {
+      laCard.classList.add("visible");
+      inspectorCard.classList.remove("visible");
+      updateLASimulatorData(currentProtocolId);
+    } else {
+      laCard.classList.remove("visible");
+      if (viewerApi?.showLASimulator) {
+        viewerApi.showLASimulator(null);
+      }
+      dockItems.forEach((b) => b.classList.remove("active"));
+      const anatomyDock = document.querySelector('.hud-dock-item[data-dock="anatomy"]');
+      if (anatomyDock) anatomyDock.classList.add("active");
+    }
+  }
+
+  laPills.forEach((pill) => {
+    pill.addEventListener("click", () => {
+      updateLASimulatorData(pill.dataset.protocol);
+    });
+  });
+
+  laCloseBtn.addEventListener("click", () => toggleLASimulator(false));
+  laBtnClear.addEventListener("click", () => toggleLASimulator(false));
+
+  laBtnPulse.addEventListener("click", () => {
+    if (viewerApi?.pulseInnervation) {
+      viewerApi.pulseInnervation(currentProtocolId);
+      const originalText = laBtnPulse.innerHTML;
+      laBtnPulse.innerHTML = "<span>⚡ Pulsing Na+ Conduction...</span>";
+      setTimeout(() => {
+        laBtnPulse.innerHTML = originalText;
+      }, 2500);
+    }
+  });
 
   // Auto-dim HUD during orbit interaction
   let dimTimeout = null;

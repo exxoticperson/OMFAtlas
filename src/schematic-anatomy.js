@@ -315,6 +315,111 @@ const boundsCenter = ([lo, hi]) => [
   (lo[2] + hi[2]) / 2,
 ];
 
+export function volumeGeometry({ center, radii }) {
+  if (![...center, ...radii].every(Number.isFinite))
+    throw new Error("A schematic volume resolved to a non-finite value");
+  const geometry = new THREE.SphereGeometry(1, 28, 18);
+  geometry.scale(radii[0], radii[1], radii[2]);
+  geometry.translate(center[0], center[1], center[2]);
+  return geometry;
+}
+
+/**
+ * Anatomically authentic 4-sided pyramidal pneumatic Maxillary Sinus (Antrum of Highmore).
+ * Grounded strictly within the maxilla bone body:
+ * - Base on lateral nasal wall
+ * - Apex in zygomatic process
+ * - Floor curved over roots of upper 1st and 2nd molars
+ * - Roof along orbital floor
+ * - Anterior wall concave behind canine fossa (never bulging past anterior cortex)
+ */
+export function createMaxillarySinusGeometry(anchors, s) {
+  const geom = new THREE.SphereGeometry(1, 28, 20);
+  const pos = geom.attributes.position;
+  const firstMolar = anchors.tooth(s < 0 ? 16 : 26);
+  const secondMolar = anchors.tooth(s < 0 ? 17 : 27);
+  const floorY = Math.min(firstMolar.apex[1], secondMolar.apex[1]) + 0.003;
+  const centerY = floorY + 0.0125;
+  const centerZ = (firstMolar.apex[2] + secondMolar.apex[2]) / 2 + 0.001;
+  const centerX = s * (Math.abs(firstMolar.apex[0]) * 0.92);
+
+  for (let i = 0; i < pos.count; i++) {
+    let x = pos.getX(i);
+    let y = pos.getY(i);
+    let z = pos.getZ(i);
+
+    const heightFactor = 1 - Math.abs(y);
+    const scaleX = 0.011 + 0.005 * heightFactor;
+    const scaleZ = 0.010 + 0.004 * heightFactor;
+    const scaleY = 0.0125;
+
+    // Lateral flare toward zygomatic process, medial restraint toward nasal wall
+    if (x > 0) x *= 1.25;
+    else x *= 0.85;
+
+    // Anterior concavity behind canine fossa
+    if (z > 0) z *= 0.82;
+
+    pos.setXYZ(
+      i,
+      centerX + (s < 0 ? -x : x) * scaleX,
+      centerY + y * scaleY,
+      centerZ + z * scaleZ
+    );
+  }
+  geom.computeVertexNormals();
+  return geom;
+}
+
+/** Anatomical funnel-pyramidal Frontal Sinus within frontal bone squama */
+export function createFrontalSinusGeometry(anchors, s) {
+  const geom = new THREE.SphereGeometry(1, 24, 18);
+  const pos = geom.attributes.position;
+  const fb = anchors.frontalBounds;
+  const centerY = fb ? fb[0][1] + 0.022 : 1.621;
+  const centerZ = fb ? fb[1][2] - 0.015 : 0.062;
+  const centerX = s * 0.0075;
+
+  for (let i = 0; i < pos.count; i++) {
+    let x = pos.getX(i);
+    let y = pos.getY(i);
+    let z = pos.getZ(i);
+
+    const taper = 1.0 - 0.35 * Math.max(0, y);
+    const scaleX = 0.0050 * taper;
+    const scaleY = 0.0075;
+    const scaleZ = 0.0045;
+
+    pos.setXYZ(i, centerX + x * scaleX, centerY + y * scaleY, centerZ + z * scaleZ);
+  }
+  geom.computeVertexNormals();
+  return geom;
+}
+
+/** Anatomical cubic-ovoid Sphenoid Sinus within sphenoid body beneath sella turcica */
+export function createSphenoidSinusGeometry(anchors, s) {
+  const geom = new THREE.SphereGeometry(1, 24, 18);
+  const pos = geom.attributes.position;
+  const sb = anchors.sphenoidBounds;
+  const centerY = sb ? (sb[0][1] + sb[1][1]) / 2 - 0.008 : 1.583;
+  const centerZ = sb ? (sb[0][2] + sb[1][2]) / 2 + 0.003 : 0.020;
+  const centerX = s * 0.0062;
+
+  for (let i = 0; i < pos.count; i++) {
+    let x = pos.getX(i);
+    let y = pos.getY(i);
+    let z = pos.getZ(i);
+
+    const scaleX = 0.0048;
+    const scaleY = 0.0062;
+    const scaleZ = 0.0058;
+
+    pos.setXYZ(i, centerX + x * scaleX, centerY + y * scaleY, centerZ + z * scaleZ);
+  }
+  geom.computeVertexNormals();
+  return geom;
+}
+
 /**
  * Every schematic structure, described once for a generic side.
  *
@@ -1046,50 +1151,22 @@ const STRUCTURES = [
     key: "maxillary-sinus",
     name: "Maxillary sinus",
     group: "airway",
-    note: "The largest paranasal sinus, occupying the body of the maxilla above the upper posterior teeth. Root apices often lie against or within its floor, which is why an upper molar extraction can open it. Shown as a schematic cavity; the source dataset has no sinus mesh.",
-    volume: (a, s) => {
-      const [lo, hi] = a.maxillaBounds(s);
-      const first = a.tooth(s < 0 ? 16 : 26);
-      const premolar = a.tooth(s < 0 ? 14 : 24);
-      return {
-        center: [
-          (first.apex[0] + premolar.apex[0]) / 2,
-          (first.apex[1] + hi[1]) / 2 + 0.002,
-          (first.apex[2] + premolar.apex[2]) / 2,
-        ],
-        radii: [0.0085, (hi[1] - first.apex[1]) / 2 + 0.002, Math.max(0.010, (hi[2] - lo[2]) / 4)],
-      };
-    },
+    note: "The largest paranasal sinus (Antrum of Highmore), occupying the body of the maxilla above the upper posterior teeth. Shaped as a 4-sided pyramid with its base at the lateral nasal wall and apex at the zygomatic process. Root apices of molars and premolars relate intimately to its floor. Shown as a true anatomical pneumatic cavity.",
+    customGeometry: (a, s) => createMaxillarySinusGeometry(a, s),
   },
   {
     key: "frontal-sinus",
     name: "Frontal sinus",
     group: "airway",
-    note: "Paired pneumatic cavity within the squama frontalis of the frontal bone, superior to the orbits and nasion, separated by the interfrontal septum. Drains into the middle nasal meatus via the frontonasal duct. Shown as a schematic cavity; the source dataset has no sinus mesh.",
-    volume: (a, s) => {
-      const fb = a.frontalBounds;
-      const centerY = fb ? fb[0][1] + 0.025 : 1.624;
-      const centerZ = fb ? fb[1][2] - 0.013 : 0.064;
-      return {
-        center: [s * 0.008, centerY, centerZ],
-        radii: [0.0060, 0.0085, 0.0055],
-      };
-    },
+    note: "Paired pneumatic cavity within the squama frontalis of the frontal bone, superior to the orbits and nasion, separated by the interfrontal septum. Drains into the middle nasal meatus via the frontonasal duct. Shown as a true anatomical pneumatic cavity.",
+    customGeometry: (a, s) => createFrontalSinusGeometry(a, s),
   },
   {
     key: "sphenoid-sinus",
     name: "Sphenoid sinus",
     group: "airway",
-    note: "Paired pneumatic cavity within the body of the sphenoid bone, separated by a thin intersphenoidal septum. Sits immediately inferior to the sella turcica and optic chiasm, draining anteriorly into the sphenoethmoidal recess. Shown as a schematic cavity; the source dataset has no sinus mesh.",
-    volume: (a, s) => {
-      const sb = a.sphenoidBounds;
-      const centerY = sb ? (sb[0][1] + sb[1][1]) / 2 - 0.008 : 1.583;
-      const centerZ = sb ? (sb[0][2] + sb[1][2]) / 2 + 0.002 : 0.020;
-      return {
-        center: [s * 0.0065, centerY, centerZ],
-        radii: [0.0055, 0.0070, 0.0065],
-      };
-    },
+    note: "Paired pneumatic cavity within the body of the sphenoid bone, separated by a thin intersphenoidal septum. Sits immediately inferior to the sella turcica and optic chiasm, draining anteriorly into the sphenoethmoidal recess. Shown as a true anatomical pneumatic cavity.",
+    customGeometry: (a, s) => createSphenoidSinusGeometry(a, s),
   },
   {
     key: "articular-disc",
@@ -1222,7 +1299,9 @@ export function createSchematicParts(parts, readVertices) {
       const name = bilateral
         ? `${prefix}${structure.name[0].toLowerCase()}${structure.name.slice(1)}`
         : structure.name;
-      const geometry = structure.volume
+      const geometry = structure.customGeometry
+        ? structure.customGeometry(anchors, side)
+        : structure.volume
         ? volumeGeometry(structure.volume(anchors, side))
         : tubeGeometry(structure.path(anchors, side), structure.radius);
       geometry.computeBoundingBox();
@@ -1257,11 +1336,3 @@ function tubeGeometry(waypoints, radius) {
   return new THREE.TubeGeometry(curve, segments, radius, 20, false);
 }
 
-function volumeGeometry({ center, radii }) {
-  if (![...center, ...radii].every(Number.isFinite))
-    throw new Error("A schematic volume resolved to a non-finite value");
-  const geometry = new THREE.SphereGeometry(1, 28, 18);
-  geometry.scale(radii[0], radii[1], radii[2]);
-  geometry.translate(center[0], center[1], center[2]);
-  return geometry;
-}

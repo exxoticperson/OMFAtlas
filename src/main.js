@@ -608,9 +608,8 @@ function updateScene() {
 }
 
 function showDetails(open = true) {
-  if (!shellNav) return;
-  if (open) shellNav.openDetails();
-  else shellNav.closeDetails();
+  // Modern floating glass HUD handles anatomy inspection without viewport layout shifts.
+  return;
 }
 
 function inspectTooth(fdi = state.fdi, { periodontium = false } = {}) {

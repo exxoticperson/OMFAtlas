@@ -666,6 +666,14 @@ html, body {
 .studio-footer,
 .close-inspector,
 .inspector.panel,
+.stage-bottom,
+.caption-stack,
+#orientation,
+#model-controls,
+.dock-switch,
+.dock-row,
+#privacy,
+#credits,
 #consent,
 .consent-dialog {
   display: none !important;
@@ -696,4 +704,428 @@ html, body {
   transform: translateX(0) !important;
   opacity: 1 !important;
   pointer-events: auto !important;
+}
+
+
+/* ==========================================================================
+   8. MODERN DENTAL SUB-MODES & CUTAWAY FLOATING PANELS
+   ========================================================================== */
+
+#mode-bar {
+  position: absolute !important;
+  top: 76px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  right: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: var(--hud-bg-glass) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border: 1px solid var(--hud-border-outer) !important;
+  box-shadow: var(--hud-shadow-floating), var(--hud-border-highlight) !important;
+  border-radius: 9999px !important;
+  padding: 5px 8px !important;
+  z-index: 92 !important;
+  width: auto !important;
+  max-width: 90vw !important;
+}
+
+#mode-bar[hidden] {
+  display: none !important;
+}
+
+#mode-bar button {
+  background: transparent !important;
+  border: 0 !important;
+  color: #94a3b8 !important;
+  padding: 6px 14px !important;
+  border-radius: 9999px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em !important;
+  cursor: pointer !important;
+  transition: all 200ms ease !important;
+  white-space: nowrap !important;
+}
+
+#mode-bar button:hover {
+  color: #f8fafc !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+#mode-bar button.active {
+  background: rgba(56, 189, 248, 0.18) !important;
+  color: #38bdf8 !important;
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.4) !important;
+}
+
+#dental-3d-controls {
+  position: absolute !important;
+  top: auto !important;
+  bottom: 88px !important;
+  right: 24px !important;
+  left: auto !important;
+  width: 330px !important;
+  max-height: calc(100vh - 140px) !important;
+  background: var(--hud-bg-glass) !important;
+  backdrop-filter: blur(32px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(180%) !important;
+  border: 1px solid var(--hud-border-outer) !important;
+  box-shadow: var(--hud-shadow-floating), var(--hud-border-highlight) !important;
+  border-radius: 20px !important;
+  padding: 16px !important;
+  z-index: 95 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  color: #f1f5f9 !important;
+  overflow-y: auto !important;
+}
+
+#dental-3d-controls[hidden] {
+  display: none !important;
+}
+
+#dental-3d-controls #exit-tooth {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  padding: 8px 14px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 9999px !important;
+  color: #f8fafc !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 200ms ease !important;
+}
+
+#dental-3d-controls #exit-tooth:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #38bdf8 !important;
+}
+
+#dental-3d-controls .tool-tabs {
+  display: flex !important;
+  gap: 4px !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  padding: 3px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+#dental-3d-controls .tool-tabs button {
+  flex: 1 !important;
+  background: transparent !important;
+  border: 0 !important;
+  color: #94a3b8 !important;
+  padding: 6px 10px !important;
+  border-radius: 9px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 200ms ease !important;
+}
+
+#dental-3d-controls .tool-tabs button.active {
+  background: #38bdf8 !important;
+  color: #0b1120 !important;
+  font-weight: 700 !important;
+}
+
+#dental-3d-controls .cut-axes {
+  display: flex !important;
+  gap: 6px !important;
+  margin-bottom: 8px !important;
+}
+
+#dental-3d-controls .cut-axes button {
+  flex: 1 !important;
+  padding: 6px 8px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  color: #cbd5e1 !important;
+  font-size: 10px !important;
+  cursor: pointer !important;
+}
+
+#dental-3d-controls .cut-axes button.active {
+  background: rgba(56, 189, 248, 0.16) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  color: #38bdf8 !important;
+}
+
+#dental-3d-controls .section-slider {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  color: #cbd5e1 !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+
+#dental-3d-controls .section-slider span {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+#dental-3d-controls .section-slider output {
+  font-family: ui-monospace, SFMono-Regular, monospace !important;
+  color: #38bdf8 !important;
+  font-size: 10px !important;
+  background: rgba(56, 189, 248, 0.12) !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+}
+
+#dental-3d-controls [type="range"] {
+  width: 100% !important;
+  max-width: 100% !important;
+  accent-color: #38bdf8 !important;
+  height: 4px !important;
+}
+
+#dental-3d-controls .cut-actions {
+  display: flex !important;
+  gap: 6px !important;
+  margin-top: 6px !important;
+}
+
+#dental-3d-controls .cut-actions button {
+  flex: 1 !important;
+  padding: 6px 8px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  color: #e2e8f0 !important;
+  font-size: 10px !important;
+  cursor: pointer !important;
+}
+
+#dental-3d-controls .cut-actions button:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+#dental-3d-controls .fine-print {
+  color: #64748b !important;
+  font-size: 10px !important;
+  line-height: 1.4 !important;
+  margin: 4px 0 0 !important;
+}
+
+#dental-3d-controls [data-tissue3d] {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #cbd5e1 !important;
+  border-radius: 8px !important;
+  padding: 5px 10px !important;
+  font-size: 11px !important;
+  cursor: pointer !important;
+}
+
+#dental-3d-controls [data-tissue3d][aria-pressed="true"] {
+  background: rgba(56, 189, 248, 0.15) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  color: #38bdf8 !important;
+}
+
+
+/* ==========================================================================
+   9. LOCAL ANESTHESIA SIMULATOR SUITE
+   ========================================================================== */
+
+#omf-la-simulator-card {
+  position: absolute;
+  bottom: 88px;
+  left: 20px;
+  width: 360px;
+  background: var(--hud-bg-glass);
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  border: 1px solid var(--hud-border-outer);
+  box-shadow: var(--hud-shadow-floating), var(--hud-border-highlight);
+  border-radius: 20px;
+  padding: 18px 20px;
+  z-index: 96;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #f1f5f9;
+  transform: translateY(20px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 380ms var(--hud-spring-ease), opacity 280ms var(--hud-spring-ease);
+}
+
+#omf-la-simulator-card.visible {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.la-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.la-card-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+.la-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.25;
+}
+
+.la-card-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.la-pills-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.la-pill-btn {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.la-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.la-pill-btn.active {
+  background: #38bdf8;
+  color: #0b1120;
+  border-color: #38bdf8;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+}
+
+.la-specs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.la-spec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.la-spec-item:nth-child(3),
+.la-spec-item:nth-child(4) {
+  grid-column: span 2;
+}
+
+.la-spec-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.la-spec-val {
+  font-size: 11.5px;
+  color: #e2e8f0;
+  line-height: 1.35;
+}
+
+.la-spec-val.highlight {
+  color: #fcd34d;
+  font-size: 11px;
+}
+
+.la-actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.la-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 200ms ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+}
+
+.la-action-btn.primary {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+
+.la-action-btn.primary:hover {
+  background: rgba(56, 189, 248, 0.28);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
+}
+
+.la-action-btn:hover:not(.primary) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* Prevent legacy .details-open from shifting the WebGL canvas or showing legacy inspector */
+body.details-open #viewer,
+.details-open #viewer {
+  position: absolute !important;
+  inset: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+body.details-open .inspector,
+body.details-open #inspector,
+.details-open .inspector,
+.details-open #inspector {
+  display: none !important;
 }

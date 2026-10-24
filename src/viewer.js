@@ -229,6 +229,15 @@ export async function createViewer(host, atlas, handlers) {
       material.roughness = finish.roughness ?? 0.55;
       material.envMapIntensity = (finish.envMapIntensity ?? 0.8) * 0.85;
     }
+    const isSinusPart = part.schematic && /sinus|antrum|cavity/i.test(part.name);
+    if (isSinusPart) {
+      material.transparent = true;
+      material.opacity = 0.38;
+      material.depthWrite = false;
+      material.side = THREE.DoubleSide;
+      if ("transmission" in material) material.transmission = 0.72;
+      material.roughness = 0.28;
+    }
     if (part.schematic) geometry.computeVertexNormals();
     const mesh = new THREE.Mesh(geometry, material);
     mesh.userData.part = part;
@@ -443,6 +452,7 @@ export async function createViewer(host, atlas, handlers) {
   pin.add(beadMesh, haloMesh, pinLabel);
   scene.add(pin);
   let pinnedLandmark = null;
+  let activePulse = null;
 
   const laSimulatorGroup = new THREE.Group();
   laSimulatorGroup.visible = false;
@@ -841,6 +851,33 @@ export async function createViewer(host, atlas, handlers) {
       if (oralCameraTween.t >= 1) {
         oralCameraTween = null;
         framing = false;
+      }
+    }
+    if (laSimulatorGroup.visible) {
+      const pulseT = (now || performance.now()) * 0.005;
+      const sVal = 1.0 + 0.16 * Math.sin(pulseT);
+      diffusionField.scale.set(sVal, sVal, sVal);
+      diffusionField.material.opacity = 0.32 + 0.24 * (Math.sin(pulseT) * 0.5 + 0.5);
+      renderBudget = Math.max(renderBudget, 2);
+    }
+    if (activePulse) {
+      const nowTime = now || performance.now();
+      const elapsed = nowTime - activePulse.startTime;
+      const progress = Math.min(1, elapsed / activePulse.duration);
+      const wave = Math.sin(progress * Math.PI);
+      for (const m of meshes) {
+        if (activePulse.targets.has(m)) {
+          m.material.emissive.set(activePulse.color || "#38bdf8");
+          m.material.emissiveIntensity = THREE.MathUtils.lerp(0.1, 1.6, wave);
+        } else if (activePulse.ghostBackground) {
+          m.material.transparent = true;
+          m.material.opacity = THREE.MathUtils.lerp(1, 0.22, wave);
+        }
+      }
+      renderBudget = Math.max(renderBudget, 2);
+      if (progress >= 1) {
+        activePulse = null;
+        if (currentState) api.update(currentState);
       }
     }
     controls.update();
@@ -1539,40 +1576,70 @@ export async function createViewer(host, atlas, handlers) {
       }
       for (const mesh of meshes) {
         const part = mesh.userData.part;
-        mesh.visible =
-          !dentalModel &&
-          (intraoralTab
-            ? intraoralVisible(part, state)
-            : !state.hidden?.has(part.id) &&
-              (part.schematic ? state.schematic !== false : true) &&
-              (state.isolated
-                ? part.id === state.selected
-                : state.layers.has(part.group) ||
-                  (state.masticatory !== false && MASTICATORY.has(part.id))));
-        const selected = part.id === state.selected;
-        const oralAtlas =
-          intraoralTab && !dentalModel && isIntraoralEligible(part);
+        const isSelected = part.id === state.selected;
+        const isSinus = part.schematic && /sinus|antrum|cavity/i.test(part.name);
+        const oralAtlas = intraoralTab && !dentalModel && isIntraoralEligible(part);
+
+        if (state.isolated && state.selected) {
+          if (state.ghostContext) {
+            mesh.visible = isSelected || state.layers.has(part.group);
+            if (!isSelected) {
+              mesh.material.transparent = true;
+              mesh.material.opacity = 0.12;
+              mesh.material.depthWrite = false;
+              mesh.material.color.set(partColor(part, groups, { presentation, selected: false }));
+              mesh.material.emissive.set("#000000");
+              mesh.material.emissiveIntensity = 0;
+              continue;
+            }
+          } else {
+            mesh.visible = isSelected;
+            if (!isSelected) continue;
+          }
+        } else {
+          mesh.visible =
+            !dentalModel &&
+            (intraoralTab
+              ? intraoralVisible(part, state)
+              : !state.hidden?.has(part.id) &&
+                (part.schematic ? state.schematic !== false : true) &&
+                (state.layers.has(part.group) &&
+                  (part.group === "muscles" ? state.masticatory !== false : true)));
+        }
+
+        if (!mesh.visible) continue;
+
         if (!oralAtlas) {
           mesh.material.color.set(
-            partColor(part, groups, { presentation, selected }),
+            partColor(part, groups, { presentation, selected: isSelected }),
           );
           mesh.material.emissive.set(
-            materialEmissive(part, { presentation, selected }),
+            materialEmissive(part, { presentation, selected: isSelected }),
           );
           mesh.material.emissiveIntensity = materialEmissiveIntensity(part, {
             presentation,
-            selected,
+            selected: isSelected,
           });
         }
-        if (q === "smooth" && "transmission" in mesh.material) {
+        if (q === "smooth" && "transmission" in mesh.material && !isSinus) {
           mesh.material.transmission = 0;
           mesh.material.thickness = 0;
         }
         if (!oralAtlas) {
           const fade = state.opacity?.get(part.group) ?? 1;
-          mesh.material.transparent = fade < 1 && !selected;
-          mesh.material.opacity = mesh.material.transparent ? fade : 1;
-          mesh.material.depthWrite = !mesh.material.transparent;
+          if (isSinus) {
+            mesh.material.transparent = true;
+            mesh.material.opacity = isSelected ? 0.60 : Math.min(fade, 0.38);
+            mesh.material.depthWrite = false;
+            mesh.material.side = THREE.DoubleSide;
+            if ("transmission" in mesh.material) {
+              mesh.material.transmission = isSelected ? 0.50 : 0.72;
+            }
+          } else {
+            mesh.material.transparent = fade < 1 && !isSelected;
+            mesh.material.opacity = mesh.material.transparent ? fade : 1;
+            mesh.material.depthWrite = !mesh.material.transparent;
+          }
         }
       }
       if (explosion !== previousExplosion) followExplosion = true;
@@ -1631,47 +1698,117 @@ export async function createViewer(host, atlas, handlers) {
       currentState.opacity.set(group, val);
       api.update(currentState);
     },
-    soloPart(partId) {
+    soloPart(partId, { ghostContext = true } = {}) {
       if (!currentState) return;
-      currentState.isolated = !currentState.isolated || currentState.selected !== partId;
-      currentState.selected = partId;
+      if (currentState.isolated && currentState.selected === partId) {
+        currentState.isolated = false;
+      } else {
+        currentState.isolated = true;
+        currentState.selected = partId;
+        currentState.ghostContext = ghostContext;
+      }
       api.update(currentState);
+    },
+    pulseInnervation(nerveKeyOrId) {
+      const targets = new Set();
+      const needle = String(nerveKeyOrId || "").toLowerCase();
+      for (const m of meshes) {
+        const p = m.userData.part;
+        if (p?.group === "nerves") {
+          if (!needle || p.name.toLowerCase().includes(needle) || p.id.toLowerCase().includes(needle)) {
+            targets.add(m);
+          }
+        }
+      }
+      if (!targets.size) {
+        for (const m of meshes) {
+          if (m.userData.part?.group === "nerves") targets.add(m);
+        }
+      }
+      activePulse = {
+        targets,
+        startTime: performance.now(),
+        duration: 2500,
+        ghostBackground: true,
+        color: "#38bdf8",
+      };
+      renderBudget = Math.max(renderBudget, 6);
     },
     showLASimulator(protocolId) {
       if (!protocolId) {
         laSimulatorGroup.visible = false;
+        if (activePulse) activePulse = null;
+        if (currentState) api.update(currentState);
+        renderBudget = Math.max(renderBudget, 2);
         render();
         return;
       }
       laSimulatorGroup.visible = true;
-      const mForamen = [0.032, 1.488, 0.018];
-      diffusionField.position.set(mForamen[0], mForamen[1], mForamen[2]);
-      needleShaft.position.set(mForamen[0] - 0.014, mForamen[1] - 0.004, mForamen[2] + 0.014);
-      needleShaft.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 1, 0),
-        new THREE.Vector3(0.7, 0.3, -0.65).normalize(),
-      );
-      needleHub.position.copy(needleShaft.position).addScaledVector(
-        new THREE.Vector3(-0.7, -0.3, 0.65).normalize(),
-        0.02,
-      );
-      renderBudget = Math.max(renderBudget, 4);
+
+      // Authentic clinical anatomical landmarks & insertion trajectories
+      const PROTOCOLS = {
+        ianb: {
+          target: [0.030, 1.506, 0.010], // Mandibular sulcus above lingula / foramen
+          approach: [-0.022, 1.494, 0.038], // Contralateral premolars
+          gaugeColor: 0xf59e0b, // 25G long (amber)
+          anesthetized: ["inferior alveolar", "mental", "incisive", "lingual"],
+        },
+        mental: {
+          target: [0.026, 1.488, 0.034], // Mental foramen between premolars 44/45 or 34/35
+          approach: [0.034, 1.504, 0.046], // Mucobuccal fold superior-anterior
+          gaugeColor: 0x38bdf8, // 27G short (cyan)
+          anesthetized: ["mental", "incisive"],
+        },
+        psa: {
+          target: [0.028, 1.545, 0.015], // Infratemporal surface of maxillary tuberosity
+          approach: [0.038, 1.528, 0.036], // Mucobuccal fold above 2nd molar, 45° angle
+          gaugeColor: 0x38bdf8, // 27G short (cyan)
+          anesthetized: ["maxillary nerve"],
+        },
+        infraorbital: {
+          target: [0.025, 1.578, 0.046], // Infraorbital foramen below orbit
+          approach: [0.026, 1.536, 0.056], // Mucobuccal fold above 1st premolar
+          gaugeColor: 0xf59e0b, // 25G/27G long
+          anesthetized: ["infraorbital", "maxillary"],
+        },
+        greater_palatine: {
+          target: [0.014, 1.540, 0.018], // Greater palatine foramen near 2nd molar
+          approach: [0.010, 1.530, 0.038], // Palatal vault anterior
+          gaugeColor: 0x38bdf8, // 27G short
+          anesthetized: ["greater palatine"],
+        },
+      };
+
+      const cfg = PROTOCOLS[protocolId] || PROTOCOLS.ianb;
+      const targetVec = new THREE.Vector3(...cfg.target);
+      const appVec = new THREE.Vector3(...cfg.approach);
+      const dir = targetVec.clone().sub(appVec).normalize();
+
+      diffusionField.position.copy(targetVec);
+      needleHub.material.color.setHex(cfg.gaugeColor);
+
+      // Orient needle shaft (length 0.035, hub back along trajectory)
+      needleShaft.position.copy(targetVec).addScaledVector(dir, -0.0175);
+      needleShaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+
+      needleHub.position.copy(targetVec).addScaledVector(dir, -0.035);
+      needleHub.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+
+      // Highlight anesthetized nerve branches
+      for (const m of meshes) {
+        const pName = (m.userData.part?.name || "").toLowerCase();
+        const matches = cfg.anesthetized.some((n) => pName.includes(n));
+        if (matches) {
+          m.material.emissive.set("#38bdf8");
+          m.material.emissiveIntensity = 0.85;
+        }
+      }
+
+      renderBudget = Math.max(renderBudget, 6);
       render();
     },
     tracePathway(pathwayId) {
-      for (const m of meshes) {
-        const isNerve = m.userData.part?.group === "nerves";
-        if (isNerve) {
-          m.material.emissive.set("#38bdf8");
-          m.material.emissiveIntensity = 0.85;
-        } else {
-          m.material.opacity = 0.28;
-          m.material.transparent = true;
-          m.material.depthWrite = false;
-        }
-      }
-      renderBudget = Math.max(renderBudget, 4);
-      render();
+      api.pulseInnervation(pathwayId);
     },
     dispose() {
       cancelAnimationFrame(frame);
